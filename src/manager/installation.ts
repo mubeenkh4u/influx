@@ -94,37 +94,71 @@ function installCoreFiles(coreDirectory: string, outputDirectory: string): void 
   }
 }
 
-export async function installInflux(
-  resourcesDirectory: string, coreDirectory: string,
-  dataDirectory = influxDataDirectory(),
-): Promise<void> {
+export function stageCoreFiles(
+  coreDirectory: string, dataDirectory = influxDataDirectory(),
+): string {
+  const installDirectory = path.join(dataDirectory, "dist");
+  installCoreFiles(coreDirectory, installDirectory);
+  return path.join(installDirectory, "main.js");
+}
+
+export async function injectShim(resourcesDirectory: string, mainScript: string): Promise<void> {
   const status = installationStatus(resourcesDirectory);
   if (status.state !== "available" && status.state !== "installed")
     throw new Error(status.details);
+  if (!existsSync(mainScript)) throw new Error("The Influx core main.js is missing");
   const directory = status.path;
-  const installDirectory = path.join(dataDirectory, "dist");
-  installCoreFiles(coreDirectory, installDirectory);
+  const active = path.join(directory, "app.asar");
+  const backup = path.join(directory, "_app.asar");
+  const unpacked = active + ".unpacked";
+  const backupUnpacked = backup + ".unpacked";
+  const previous = path.join(directory, ".influx-previous-" + process.pid + ".asar");
+  const staged = path.join(directory, ".influx-next-" + process.pid + ".asar");
   const temporary = mkdtempSync(path.join(os.tmpdir(), "influx-manager-shim-"));
-  const staged = path.join(directory, ".influx-manager-shim.asar");
+  let movedOriginal = false;
+  let movedUnpacked = false;
+  let movedShim = false;
   try {
     writeFileSync(path.join(temporary, "package.json"),
       JSON.stringify({ name: "influx-shim", main: "index.js" }));
     writeFileSync(path.join(temporary, "index.js"),
-      "require(" + JSON.stringify(path.join(installDirectory, "main.js")) + ");\n");
+      "require(" + JSON.stringify(mainScript) + ");\n");
     await createPackage(temporary, staged);
     if (status.state === "available") {
-      renameSync(path.join(directory, "app.asar"), path.join(directory, "_app.asar"));
-      const unpacked = path.join(directory, "app.asar.unpacked");
-      if (existsSync(unpacked))
-        renameSync(unpacked, path.join(directory, "_app.asar.unpacked"));
+      renameSync(active, backup);
+      movedOriginal = true;
+      if (existsSync(unpacked)) {
+        renameSync(unpacked, backupUnpacked);
+        movedUnpacked = true;
+      }
     } else {
-      rmSync(path.join(directory, "app.asar"), { force: true });
+      renameSync(active, previous);
+      movedShim = true;
     }
-    renameSync(staged, path.join(directory, "app.asar"));
+    try {
+      renameSync(staged, active);
+    } catch (error) {
+      if (movedShim) renameSync(previous, active);
+      if (movedUnpacked) renameSync(backupUnpacked, unpacked);
+      if (movedOriginal) renameSync(backup, active);
+      throw error;
+    }
+    if (movedShim) rmSync(previous, { force: true });
   } finally {
     rmSync(staged, { force: true });
     rmSync(temporary, { recursive: true, force: true });
   }
+}
+
+export async function installInflux(
+  resourcesDirectory: string, coreDirectory: string,
+  dataDirectory = influxDataDirectory(),
+): Promise<void> {
+  const state = installationStatus(resourcesDirectory).state;
+  if (state !== "available" && state !== "installed")
+    throw new Error("Fluxer must have a healthy installation before installing Influx");
+  const mainScript = stageCoreFiles(coreDirectory, dataDirectory);
+  await injectShim(resourcesDirectory, mainScript);
 }
 
 export function uninstallInflux(resourcesDirectory: string): void {
@@ -132,10 +166,19 @@ export function uninstallInflux(resourcesDirectory: string): void {
   if (status.state !== "installed")
     throw new Error("Uninstall requires a valid Influx installation and Fluxer backup");
   const directory = status.path;
-  rmSync(path.join(directory, "app.asar"), { force: true });
-  renameSync(path.join(directory, "_app.asar"), path.join(directory, "app.asar"));
-  const unpacked = path.join(directory, "_app.asar.unpacked");
-  if (existsSync(unpacked)) renameSync(unpacked, path.join(directory, "app.asar.unpacked"));
+  const active = path.join(directory, "app.asar");
+  const backup = path.join(directory, "_app.asar");
+  const previous = path.join(directory, ".influx-uninstall-" + process.pid + ".asar");
+  renameSync(active, previous);
+  try {
+    renameSync(backup, active);
+  } catch (error) {
+    renameSync(previous, active);
+    throw error;
+  }
+  const unpacked = backup + ".unpacked";
+  if (existsSync(unpacked)) renameSync(unpacked, active + ".unpacked");
+  rmSync(previous, { force: true });
 }
 
 export function installedCoreVersion(coreDirectory: string): string {
