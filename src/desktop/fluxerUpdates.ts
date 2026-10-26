@@ -32,11 +32,12 @@ while [ "$attempts" -lt 600 ] && launchctl list "$label" 2>/dev/null | grep -q '
   attempts=$((attempts + 1))
 done
 cd "$2" || exit 1
-if [ -f app.asar ] && [ ! -e _app.asar ]; then
+mkdir -p influx-original
+if [ -f app.asar ] && [ ! -e influx-original/app.asar ]; then
   ELECTRON_RUN_AS_NODE=1 "$6" -e ""
   cp "$3" .influx-shim.asar &&
-    mv app.asar _app.asar &&
-    { [ ! -e app.asar.unpacked ] || mv app.asar.unpacked _app.asar.unpacked; } &&
+    mv app.asar influx-original/app.asar &&
+    { [ ! -e app.asar.unpacked ] || mv app.asar.unpacked influx-original/app.asar.unpacked; } &&
     mv .influx-shim.asar app.asar
 fi
 [ "$5" = 1 ] && open "$4"
@@ -60,6 +61,7 @@ try {
     Where-Object { $_.Path -eq ${quotePowerShell(updateExecutable)} } |
     Wait-Process -Timeout 600
   if ((Test-Path -LiteralPath $fluxerAsar) -and -not (Test-Path -LiteralPath $movedAsar)) {
+    New-Item -ItemType Directory -Force -Path $originalDirectory | Out-Null
     Copy-Item -LiteralPath ${quotePowerShell(shim)} -Destination $stagedShim
     Move-Item -LiteralPath $fluxerAsar -Destination $movedAsar
     if (Test-Path -LiteralPath "$fluxerAsar.unpacked") {
