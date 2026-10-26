@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { app, ipcMain, session } from "electron";
 
+import { enabledExternalPlugins } from "../shared/externalPlugins";
 import { FLUXER_APP_ORIGINS, IPC_GET_RENDERER } from "./constants";
 import { keepAcrossFluxerUpdates } from "./fluxerUpdates";
 import { registerUpdater } from "./updater";
@@ -41,7 +42,13 @@ registerUpdater(INFLUX_DIRECTORY);
 keepAcrossFluxerUpdates(INFLUX_DIRECTORY, fluxerMain);
 
 ipcMain.on(IPC_GET_RENDERER, (event) => {
-  event.returnValue = readFileSync(path.join(INFLUX_DIRECTORY, "renderer.js"), "utf8");
+  const renderer = readFileSync(path.join(INFLUX_DIRECTORY, "renderer.js"), "utf8");
+  try {
+    event.returnValue = { renderer, plugins: enabledExternalPlugins() };
+  } catch (error) {
+    console.error("[Influx] Could not read external plugins:", error);
+    event.returnValue = { renderer, plugins: [] };
+  }
 });
 
 void app.whenReady().then(() => {
