@@ -178,9 +178,10 @@ function PluginRow({ plugin, needsReload }: { plugin: PluginDefinition; needsRel
       <div className={row("settingMain")}>
         <div className={row("settingTitleRow")}>
           <span className={row("settingTitle")}>{plugin.name}</span>
-          {(plugin.required || needsReload) && (
+          {(plugin.required || plugin.externallyManaged || needsReload) && (
             <span className={nativeClasses("SettingsStatusBadge.module__badges___")}>
               {plugin.required && <span className={badge("new")}>Required</span>}
+              {plugin.externallyManaged && <span className={badge()}>Managed by Influx Manager</span>}
               {needsReload && (
                 <span className={`influx-badge-warning ${badge()}`}>Reload to apply</span>
               )}
@@ -218,7 +219,7 @@ function PluginRow({ plugin, needsReload }: { plugin: PluginDefinition; needsRel
         <Switch
           ariaLabel={`${enabled ? "Disable" : "Enable"} ${plugin.name}`}
           value={enabled}
-          disabled={plugin.required}
+          disabled={plugin.required || plugin.externallyManaged}
           onChange={(value: boolean) => setPluginEnabled(plugin, value)}
         />
       </div>
