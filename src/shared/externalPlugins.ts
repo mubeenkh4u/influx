@@ -168,7 +168,7 @@ function inspect(dataDirectory: string): Array<{
           version: contents.manifest.version,
           description: contents.manifest.description ?? "",
           status,
-          fingerprint: contents.hash.slice(0, 12),
+          fingerprint: contents.hash,
         },
         contents,
       };
