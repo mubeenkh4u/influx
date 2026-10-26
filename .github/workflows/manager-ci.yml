@@ -25,5 +25,44 @@ jobs:
         run: bun test
       - name: Lint
         run: bun run lint
-      - name: Build
+      - name: Build Influx core
         run: bun run build --release
+      - name: Build Influx Manager
+        run: bun run build:manager
+
+  package:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Electron runtime
+        run: bun install --frozen-lockfile
+      - name: Build core
+        run: bun run build --release
+      - name: Build manager
+        run: bun run build:manager
+      - name: Bundle Electron
+        run: bun run package:manager
+      - name: Archive Linux package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cd dist/manager/packages
+          tar -czf influx-manager-linux-x64.tar.gz influx-manager-linux-x64
+      - name: Archive Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/manager/packages/influx-manager-win32-x64" -DestinationPath "dist/manager/packages/influx-manager-win32-x64.zip"
+      - name: Upload preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: influx-manager-${{ runner.os }}
+          path: |
+            dist/manager/packages/*.tar.gz
+            dist/manager/packages/*.zip
+          if-no-files-found: error
