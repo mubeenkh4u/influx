@@ -100,7 +100,7 @@ export async function installInflux(
   if (status.state !== "available" && status.state !== "installed")
     throw new Error(status.details);
   const directory = status.path;
-  const installDirectory = path.join(influxDataDirectory(), "dist");
+  const installDirectory = path.join(dataDirectory, "dist");
   installCoreFiles(coreDirectory, installDirectory);
   const temporary = mkdtempSync(path.join(os.tmpdir(), "influx-manager-shim-"));
   const staged = path.join(directory, ".influx-manager-shim.asar");
