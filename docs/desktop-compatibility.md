@@ -34,3 +34,16 @@ window.Influx?.plugins?.FakePlutonium?.getStatus()
 Enable FakePlutonium in Influx plugins settings and start a stream. Its quality preference changes client-side access to the options; it does not change paid account state, server bitrate policy, or guarantee the recipient's actual resolution.
 
 **Not yet smoke-tested against a released Windows Fluxer binary.** If `window.Influx` is undefined, check preload diagnostics and CSP policies before investigating the plugin. The separate CSP handling and Electron ESM bootstrap may still require adaptation to the installed build.
+
+## GitHub Actions: no local Bun required
+
+Pull request builds run automatically in **Actions > Windows Test Build**. Open the successful run, then download the **influx-windows-experimental** artifact from the Artifacts section.
+
+1. Extract the complete artifact ZIP into a normal folder. Keep the installer EXE and the three `influx-*.js` files together.
+2. Exit Fluxer completely (including its tray process).
+3. Open PowerShell in the extracted folder and run `./influx-installer-windows-x64.exe --local` (PowerShell also accepts `.\\influx-installer-windows-x64.exe --local`).
+4. Restart Fluxer and check `window.Influx?.plugins?.FakePlutonium?.getStatus()` in DevTools.
+
+The **`--local`** flag is important: without it, the compiled installer still downloads upstream Influx. The action produces an experimental build, not a GitHub Release. Keep the ZIP only for testing and do not merge the draft PR without a real desktop smoke test.
+
+The `workflow_dispatch` manual **Run workflow** button generally requires the workflow to exist on the default branch. Until the PR is merged, use the automatic PR run instead.
