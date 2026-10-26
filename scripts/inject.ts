@@ -19,7 +19,7 @@ import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
 import { localReleaseDirectory } from "../src/shared/localRelease";
 import { DESKTOP_ASSETS, downloadDesktopRelease, installFiles } from "../src/shared/release";
-import { fluxerArchivePaths } from "../src/shared/archiveLayout";
+import { fluxerArchivePaths, isFluxerDesktopPackage } from "../src/shared/archiveLayout";
 
 const SHIM_NAME = "influx-shim";
 const USAGE = `Installs Influx into the Fluxer desktop app.
@@ -31,6 +31,7 @@ Usage: influx-installer [options]
   --stable          Use stable Fluxer even when only Canary is found
   --path <folder>   Fluxer's resources folder, or its .app bundle on macOS
   --uninstall       Remove Influx and restore Fluxer's original files
+  --diagnose        Inspect archive backups without changing files
   --development     Install this checkout's build (source checkout only)
   --local           Install release assets from this checkout or beside this installer
   --help            Show this help`;
@@ -39,8 +40,10 @@ const compiled = /\$bunfs|~BUN/i.test(import.meta.url);
 const root = path.dirname(import.meta.dir);
 const options = process.argv.slice(2);
 const pathOption = options.includes("--path") ? options[options.indexOf("--path") + 1] : undefined;
-const mode = options.includes("--uninstall")
-  ? "uninstall"
+const mode = options.includes("--diagnose")
+  ? "diagnose"
+  : options.includes("--uninstall")
+    ? "uninstall"
   : options.includes("--development")
     ? "development"
     : options.includes("--local")
@@ -136,6 +139,10 @@ async function main(): Promise<void> {
     throw new Error("--development needs a source checkout: run `bun run inject --development`.");
   }
   const resourcesDirectory = fluxerResourcesDirectory();
+  if (mode === "diagnose") {
+    diagnoseResources(resourcesDirectory);
+    return;
+  }
   if (!hasFluxer(resourcesDirectory)) {
     throw new Error(
       `No app.asar in ${resourcesDirectory}. Pass --path to your Fluxer install (or --canary).`,
@@ -179,11 +186,47 @@ async function main(): Promise<void> {
   console.log(`Installed ${installed} into ${resourcesDirectory}. Restart Fluxer.`);
 }
 
-function isInfluxShim(asarPath: string): boolean {
+function readAsarPackage(asarPath: string): Record<string, unknown> | null {
+  if (!existsSync(asarPath) || !statSync(asarPath).isFile()) return null;
   try {
-    return JSON.parse(extractFile(asarPath, "package.json").toString("utf8")).name === SHIM_NAME;
+    const pkg: unknown = JSON.parse(extractFile(asarPath, "package.json").toString("utf8"));
+    return typeof pkg === "object" && pkg !== null ? (pkg as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isInfluxShim(asarPath: string): boolean {
+  return readAsarPackage(asarPath)?.name === SHIM_NAME;
+}
+
+function isFluxerArchive(asarPath: string): boolean {
+  const pkg = readAsarPackage(asarPath);
+  if (!isFluxerDesktopPackage(pkg)) return false;
+  try {
+    // A plausible package.json isn't enough: the actual Electron entry must exist.
+    extractFile(asarPath, pkg.main);
+    return true;
   } catch {
     return false;
+  }
+}
+
+function diagnoseResources(resourcesDirectory: string): void {
+  const { live, original, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
+  const previous = path.join(path.dirname(original), "previous-app.asar");
+  console.log(`Archive diagnostics for ${resourcesDirectory}:`);
+  for (const asarPath of [live, original, legacyOriginal, previous]) {
+    const size = existsSync(asarPath) ? statSync(asarPath).size : null;
+    const kind = size === null
+      ? "MISSING"
+      : isFluxerArchive(asarPath)
+        ? "valid Fluxer desktop"
+        : isInfluxShim(asarPath)
+          ? "Influx shim"
+          : "not a readable Fluxer archive";
+    console.log(`  ${asarPath}: ${kind}${size === null ? "" : ` (${size} bytes)`}`);
+    console.log(`    native files: ${existsSync(`${asarPath}.unpacked`) ? "present" : "missing"}`);
   }
 }
 
@@ -194,33 +237,69 @@ function replaceWith(from: string, to: string): void {
 }
 
 function moveFluxerAside(resourcesDirectory: string): void {
-  const { live: fluxerAsar, original: movedAsar, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
-  if (!existsSync(movedAsar) && existsSync(legacyOriginal)) {
-    mkdirSync(path.dirname(movedAsar), { recursive: true });
-    replaceWith(legacyOriginal, movedAsar);
-    replaceWith(`${legacyOriginal}.unpacked`, `${movedAsar}.unpacked`);
+  const { live, original, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
+  const previous = path.join(path.dirname(original), "previous-app.asar");
+
+  // Validate the actual ASAR *before* modifying the real app or its backups.
+  if (isFluxerArchive(live)) {
+    mkdirSync(path.dirname(original), { recursive: true });
+    if (existsSync(original)) {
+      // Keep one previous original when a Fluxer update replaces the live archive.
+      replaceWith(original, previous);
+      replaceWith(`${original}.unpacked`, `${previous}.unpacked`);
+    }
+    renameSync(live, original);
+    replaceWith(`${live}.unpacked`, `${original}.unpacked`);
+  } else if (!existsSync(live) || isInfluxShim(live)) {
+    if (!isFluxerArchive(original) && isFluxerArchive(legacyOriginal)) {
+      if (existsSync(original))
+        throw new Error(`Refusing to overwrite an unreadable archive at ${original}; run --diagnose`);
+      mkdirSync(path.dirname(original), { recursive: true });
+      renameSync(legacyOriginal, original);
+      replaceWith(`${legacyOriginal}.unpacked`, `${original}.unpacked`);
+    }
+  } else {
+    throw new Error(`Live app.asar is neither Fluxer nor Influx: ${live}; run --diagnose`);
   }
-  if (existsSync(fluxerAsar) && !isInfluxShim(fluxerAsar)) {
-    mkdirSync(path.dirname(movedAsar), { recursive: true });
-    replaceWith(fluxerAsar, movedAsar);
-    replaceWith(`${fluxerAsar}.unpacked`, `${movedAsar}.unpacked`);
-  }
-  if (!existsSync(movedAsar))
-    throw new Error(`Fluxer's app.asar is missing from ${resourcesDirectory}`);
+
+  if (!isFluxerArchive(original))
+    throw new Error(
+      "No valid original Fluxer desktop archive is available. Installation stopped without " +
+        "replacing the live app.asar. Run --diagnose. If every backup is invalid, " +
+        "repair/reinstall the official Fluxer desktop application first.",
+    );
 }
 
 function uninstall(resourcesDirectory: string): void {
-  const { live: fluxerAsar, original: stableOriginal, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
-  const movedAsar = existsSync(stableOriginal) ? stableOriginal : legacyOriginal;
-  if (!existsSync(movedAsar)) return;
-  if (existsSync(fluxerAsar) && !isInfluxShim(fluxerAsar)) {
-    rmSync(movedAsar, { force: true });
-    rmSync(`${movedAsar}.unpacked`, { recursive: true, force: true });
+  const { live, original, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
+  const previous = path.join(path.dirname(original), "previous-app.asar");
+  if (isFluxerArchive(live)) {
+    console.log("The official Fluxer archive is already active; no shim to remove.");
     return;
   }
-  rmSync(fluxerAsar, { force: true });
-  replaceWith(movedAsar, fluxerAsar);
-  replaceWith(`${movedAsar}.unpacked`, `${fluxerAsar}.unpacked`);
+  if (!isInfluxShim(live))
+    throw new Error("Cannot identify an Influx shim in app.asar. Nothing was changed. Run --diagnose.");
+
+  const backup = [original, legacyOriginal, previous].find(isFluxerArchive);
+  if (!backup)
+    throw new Error(
+      "Unable to restore Fluxer: no valid original app.asar is present. " +
+        "The Influx shim was NOT removed. Run --diagnose and repair the official Fluxer installation.",
+    );
+
+  // Never delete the only bootable app without a valid original to restore.
+  const stagedShim = path.join(resourcesDirectory, ".influx-uninstall.asar");
+  if (existsSync(stagedShim))
+    throw new Error(`Remove or back up the previous recovery file first: ${stagedShim}`);
+  renameSync(live, stagedShim);
+  try {
+    renameSync(backup, live);
+    replaceWith(`${backup}.unpacked`, `${live}.unpacked`);
+    rmSync(stagedShim, { force: true });
+  } catch (error) {
+    if (!existsSync(live)) renameSync(stagedShim, live);
+    throw error;
+  }
 }
 
 async function buildShim(mainScript: string, destination: string): Promise<void> {
