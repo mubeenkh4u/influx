@@ -3,6 +3,7 @@ import { definePluginSettings } from "@api/Settings";
 import { filters, waitFor } from "@webpack/finders";
 
 import {
+  applyCaptureUpgrade,
   shouldEnhanceMonitorCapture,
   suggestCaptureUpgrade,
   type CaptureDimensions,
@@ -47,6 +48,7 @@ interface CaptureDiagnostics {
   actualBefore?: CaptureDimensions;
   requested?: CaptureUpgrade;
   actualAfter?: CaptureDimensions;
+  fallbackUsed?: boolean;
   error?: string;
 }
 
@@ -181,12 +183,7 @@ async function enhanceCapturedTrack(
   try {
     // Apply to the existing video track instead of reacquiring the display.
     // This preserves Fluxer's native desktop-audio bridge and chosen source.
-    await track.applyConstraints({
-      ...track.getConstraints(),
-      width: { ideal: requested.width },
-      height: { ideal: requested.height },
-      frameRate: { ideal: requested.frameRate, max: requested.frameRate },
-    });
+    const { fallbackUsed } = await applyCaptureUpgrade(track, requested);
     const after = track.getSettings();
     const updated = { width: after.width ?? 0, height: after.height ?? 0 };
     const grew = updated.width * updated.height > dims.width * dims.height * 1.1;
@@ -194,6 +191,7 @@ async function enhanceCapturedTrack(
       actualBefore: dims,
       requested,
       actualAfter: updated,
+      fallbackUsed,
     });
   } catch (error) {
     setLastCapture("rejected", {
