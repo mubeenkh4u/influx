@@ -92,7 +92,10 @@ function installCoreFiles(coreDirectory: string, outputDirectory: string): void 
   }
 }
 
-export async function installInflux(resourcesDirectory: string, coreDirectory: string): Promise<void> {
+export async function installInflux(
+  resourcesDirectory: string, coreDirectory: string,
+  dataDirectory = influxDataDirectory(),
+): Promise<void> {
   const status = installationStatus(resourcesDirectory);
   if (status.state !== "available" && status.state !== "installed")
     throw new Error(status.details);
