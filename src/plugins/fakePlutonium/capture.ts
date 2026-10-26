@@ -88,3 +88,29 @@ export function shouldEnhanceMonitorCapture(
     higherQualityEnabled &&
     captureEnhancementEnabled;
 }
+
+/**
+ * First retain the track's existing capture options (cursor/surface/etc).
+ * Some Chromium capture backends reject frame-rate constraints while accepting
+ * a resolution-only change; retrying only dimensions avoids losing the share.
+ */
+export async function applyCaptureUpgrade(
+  track: Pick<MediaStreamTrack, "getConstraints" | "applyConstraints">,
+  target: CaptureUpgrade,
+): Promise<{ fallbackUsed: boolean }> {
+  const width = { ideal: target.width };
+  const height = { ideal: target.height };
+
+  try {
+    await track.applyConstraints({
+      ...track.getConstraints(),
+      width,
+      height,
+      frameRate: { ideal: target.frameRate, max: target.frameRate },
+    });
+    return { fallbackUsed: false };
+  } catch {
+    await track.applyConstraints({ width, height });
+    return { fallbackUsed: true };
+  }
+}
