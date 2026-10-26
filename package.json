@@ -14,7 +14,9 @@
     "inject": "bun scripts/inject.ts",
     "uninject": "bun scripts/inject.ts --uninstall",
     "fmt": "oxfmt",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "build:manager": "bun scripts/build-manager.ts",
+    "package:manager": "bun scripts/package-manager.ts"
   },
   "devDependencies": {
     "@electron/asar": "^4.3.1",
