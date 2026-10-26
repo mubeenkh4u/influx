@@ -44,7 +44,7 @@ Pull request builds run automatically in **Actions > Windows Test Build**. Open 
 3. Open PowerShell in the extracted folder and run `./influx-installer-windows-x64.exe --local` (PowerShell also accepts `.\\influx-installer-windows-x64.exe --local`).
 4. Restart Fluxer and check `window.Influx?.plugins?.FakePlutonium?.getStatus()` in DevTools.
 
-The **`--local`** flag is important: without it, the compiled installer still downloads upstream Influx. The action produces an experimental build, not a GitHub Release. Keep the ZIP only for testing and do not merge the draft PR without a real desktop smoke test.
+**The compiled installer now installs its adjacent forked assets by default**, even when double-clicked. `--local` still works. `--upstream` explicitly downloads upstream Influx, but should not be used with this fork. Locally installed builds disable the upstream in-app updater so it cannot overwrite these changes. The action produces an experimental build, not a GitHub Release. Keep the ZIP only for testing and do not merge the draft PR without a real desktop smoke test.
 
 The `workflow_dispatch` manual **Run workflow** button generally requires the workflow to exist on the default branch. Until the PR is merged, use the automatic PR run instead.
 
@@ -65,15 +65,18 @@ every released Fluxer desktop version.
 2. Exit Fluxer completely, then run
    `./influx-installer-windows-x64.exe --diagnose` from PowerShell in that folder.
    This command does not modify files.
-3. If either `influx-original/app.asar` or `_app.asar` reports
+3. Check **Influx main.js diagnostics**. Once installed, it should say `supports influx-original layout: yes` and `installed matches local artifact: YES`.
+4. If either `influx-original/app.asar` or `_app.asar` reports
    **valid Fluxer desktop**, run `./influx-installer-windows-x64.exe --uninstall`
    and verify the stock Fluxer client opens. Exit Fluxer again.
-4. Then run `./influx-installer-windows-x64.exe --local` to install the
+5. Then run `./influx-installer-windows-x64.exe --local` to install the
    **forked** assets, not upstream Influx.
-5. If all original archives report **MISSING** or **not a readable Fluxer archive**,
+6. If all original archives report **MISSING** or **not a readable Fluxer archive**,
    do not force an uninstall or rename archives manually. Repair/reinstall the
    official Fluxer desktop app first without deleting your user profile, verify
-   it starts normally, and repeat steps 2–4.
+   it starts normally, and repeat steps 2–5.
 
 If Fluxer opens but `window.Influx` is missing in DevTools, the remaining problem
 is Electron injection/preload compatibility rather than an invalid archive.
+
+A successfully generated artifact does not prove it was installed. The installer verifies SHA-256 checksums of copied files, and `--diagnose` compares the installed `%APPDATA%/Influx/dist/main.js` with the adjacent `influx-main.js`. A small `app.asar` shim can remain from an old attempt while the renderer/main assets are still outdated.
