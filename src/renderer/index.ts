@@ -10,8 +10,22 @@ import * as webpack from "./webpack/patchWebpack";
 
 const logger = new Logger("Core");
 
+type ExternalBundle = { id: string; name: string; version: string; code: string };
+let loadingExternal: ExternalBundle | null = null;
+let externalRegistered = false;
+
 const Influx = {
   version: INFLUX_VERSION,
+  registerPlugin(plugin: Plugins.PluginDefinition): void {
+    if (!loadingExternal || externalRegistered)
+      throw new Error("External plugins may only register once during startup");
+    if (plugin.name !== loadingExternal.name)
+      throw new Error("External plugin name does not match the manifest");
+    if (!Array.isArray(plugin.authors) || typeof plugin.description !== "string")
+      throw new Error("External plugin requires a description and authors array");
+    externalRegistered = true;
+    Plugins.registerPlugins([{ ...plugin, externallyManaged: true }]);
+  },
   plugins: Plugins.plugins,
   Plugins,
   Settings,
@@ -30,6 +44,7 @@ const Influx = {
 declare global {
   interface Window {
     Influx: typeof Influx;
+    __influxExternalPlugins?: ExternalBundle[];
   }
 }
 
@@ -41,6 +56,23 @@ function evalAllowed(): boolean {
   }
 }
 
+function registerExternalPlugins(): void {
+  const bundles = window.__influxExternalPlugins ?? [];
+  delete window.__influxExternalPlugins;
+  for (const bundle of bundles) {
+    loadingExternal = bundle;
+    externalRegistered = false;
+    try {
+      (0, eval)(bundle.code + "\n//# sourceURL=influx-plugin-" + bundle.id + ".js");
+      if (!externalRegistered) logger.error("No registration from external plugin " + bundle.id);
+    } catch (error) {
+      logger.error("Failed to load external plugin " + bundle.id, error);
+    } finally {
+      loadingExternal = null;
+    }
+  }
+}
+
 function initialize(): void {
   if (window.Influx) {
     logger.warn("Already loaded, skipping second injection");
@@ -49,6 +81,7 @@ function initialize(): void {
   window.Influx = Influx;
 
   Plugins.registerPlugins(pluginList);
+  registerExternalPlugins();
   Plugins.pendingPatches.push(Gateway.gatewayPatch);
   if (evalAllowed()) {
     webpack.installWebpackHook(Plugins.pendingPatches);
