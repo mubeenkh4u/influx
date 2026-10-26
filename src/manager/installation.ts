@@ -1,4 +1,4 @@
-import { createPackage, extractFile } from "@electron/asar";
+import { createPackage, extractFile, uncache } from "@electron/asar";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +15,7 @@ const ASSETS = ["main.js", "preload.js", "renderer.js"] as const;
 
 function originalPackage(asar: string): boolean {
   try {
+    uncache(asar);
     const pkg = JSON.parse(extractFile(asar, "package.json").toString("utf8")) as {
       name?: string; productName?: string;
     };
@@ -26,6 +27,7 @@ function originalPackage(asar: string): boolean {
 
 function shim(asar: string): boolean {
   try {
+    uncache(asar);
     return (JSON.parse(extractFile(asar, "package.json").toString("utf8")) as { name?: string })
       .name === "influx-shim";
   } catch {
