@@ -5,13 +5,16 @@ import { pathToFileURL } from "node:url";
 import { app, ipcMain, session } from "electron";
 
 import { FLUXER_APP_ORIGINS, IPC_GET_RENDERER } from "./constants";
+import { fluxerArchivePaths } from "../shared/archiveLayout";
+import { existsSync } from "node:fs";
 import { keepAcrossFluxerUpdates } from "./fluxerUpdates";
 import { registerUpdater } from "./updater";
 
 // Set by the build banner; Bun would otherwise bake in the build machine's __dirname.
 declare const INFLUX_DIRECTORY: string;
 
-const fluxerAsar = path.join(process.resourcesPath, "_app.asar");
+const archives = fluxerArchivePaths(process.resourcesPath);
+const fluxerAsar = existsSync(archives.original) ? archives.original : archives.legacyOriginal;
 const fluxerPackage = JSON.parse(readFileSync(path.join(fluxerAsar, "package.json"), "utf8"));
 const fluxerMain = path.join(fluxerAsar, fluxerPackage.main);
 
