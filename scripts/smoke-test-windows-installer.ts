@@ -51,6 +51,8 @@ try {
   await createPackage(source, live);
   mkdirSync(`${live}.unpacked`, { recursive: true });
   writeFileSync(path.join(`${live}.unpacked`, "native-placeholder.txt"), "binary fixture");
+  assert.equal(pkg(live).name, "fluxer_desktop", "the fixture must be a readable ASAR");
+  console.log(installerRun(["--diagnose"], true).stdout);
 
   installerRun(["--local"], true);
   assert.equal(pkg(live).name, "influx-shim", "live archive should contain the shim");
