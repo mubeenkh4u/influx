@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Influx Manager</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="renderer.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">I</div>
+        <div><strong>INFLUX</strong><span>MANAGER</span></div>
+      </div>
+      <div class="sidebar-label">WORKSPACE</div>
+      <a class="nav-item selected" href="#overview"><span aria-hidden="true">◈</span> Overview</a>
+      <a class="nav-item" href="#plugin-section"><span aria-hidden="true">◇</span> Plugins</a>
+      <div class="sidebar-bottom">
+        <span class="indicator"></span> Local desktop manager
+        <p id="version">Loading version…</p>
+      </div>
+    </aside>
+    <main id="overview" class="main">
+      <header class="top-bar">
+        <div>
+          <p class="eyebrow">DESKTOP CLIENT MODDING</p>
+          <h1>Influx Manager</h1>
+          <p class="lead">Configure Fluxer. Manage plugins independently. Build once.</p>
+        </div>
+        <div class="top-chip">LOCAL INSTALLATION</div>
+      </header>
+
+      <section class="panel install-panel" aria-label="Influx installation">
+        <div class="section-heading">
+          <div><p class="eyebrow">SYSTEM</p><h2>Fluxer installation</h2></div>
+          <span id="installation" class="state">Detecting…</span>
+        </div>
+        <p id="installation-details" class="secondary">Locating your Fluxer installation…</p>
+        <div class="path-box"><span class="path-label">RESOURCES</span>
+          <code id="installation-path">…</code></div>
+        <div class="actions">
+          <button class="button primary" id="install" type="button">Install Influx</button>
+          <button class="button secondary" id="choose-fluxer" type="button">Choose folder</button>
+          <button class="button ghost" id="reset-fluxer" type="button">Auto-detect</button>
+          <button class="button danger" id="uninstall" type="button">Uninstall</button>
+        </div>
+      </section>
+
+      <section id="plugin-section" class="plugin-section">
+        <div class="section-heading plugins-heading">
+          <div><p class="eyebrow">EXTENSIONS</p><h2>External plugins</h2>
+            <p class="secondary">Installed independently of the Influx core.</p></div>
+          <span class="count" id="plugin-count">Loading…</span>
+        </div>
+        <div class="actions plugin-toolbar">
+          <button class="button primary" id="import-plugin" type="button">+ Import plugin</button>
+          <button class="button secondary" id="open-plugins" type="button">Open plugins folder</button>
+          <button class="button ghost" id="open-logs" type="button">View logs</button>
+        </div>
+        <div class="path-box"><span class="path-label">PLUGIN DIRECTORY</span>
+          <code id="plugins-path">…</code></div>
+        <div id="plugins" class="plugin-list" aria-live="polite"></div>
+      </section>
+
+      <section class="security-note" aria-label="Plugin security">
+        <span class="security-icon" aria-hidden="true">!</span>
+        <div><strong>Run only plugins you trust</strong>
+          <p>External plugins execute JavaScript inside Fluxer. New and modified plugins remain blocked until you explicitly approve them. Restart Fluxer to apply plugin changes and startup patches.</p></div>
+      </section>
+      <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+      <footer>Influx is an independent community project and is not affiliated with Fluxer.</footer>
+    </main>
+  </div>
+</body>
+</html>
