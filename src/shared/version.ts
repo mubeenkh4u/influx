@@ -1,4 +1,4 @@
-export const INFLUX_REPOSITORY = "imkylecat/influx";
+export const INFLUX_REPOSITORY = "mubeenkh4u/influx";
 export const RELEASES_URL = `https://github.com/${INFLUX_REPOSITORY}/releases`;
 export const LATEST_RELEASE_API = `https://api.github.com/repos/${INFLUX_REPOSITORY}/releases/latest`;
 
