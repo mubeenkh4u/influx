@@ -18,6 +18,7 @@ import { createPackage, extractFile } from "@electron/asar";
 import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
 import { DESKTOP_ASSETS, downloadDesktopRelease, installFiles } from "../src/shared/release";
+import { fluxerArchivePaths } from "../src/shared/archiveLayout";
 
 const SHIM_NAME = "influx-shim";
 const USAGE = `Installs Influx into the Fluxer desktop app.
@@ -66,7 +67,8 @@ function fluxerResourcesDirectory(): string {
 function hasFluxer(resourcesDirectory: string): boolean {
   return (
     existsSync(path.join(resourcesDirectory, "app.asar")) ||
-    existsSync(path.join(resourcesDirectory, "_app.asar"))
+    existsSync(fluxerArchivePaths(resourcesDirectory).original) ||
+    existsSync(fluxerArchivePaths(resourcesDirectory).legacyOriginal)
   );
 }
 
@@ -187,9 +189,14 @@ function replaceWith(from: string, to: string): void {
 }
 
 function moveFluxerAside(resourcesDirectory: string): void {
-  const fluxerAsar = path.join(resourcesDirectory, "app.asar");
-  const movedAsar = path.join(resourcesDirectory, "_app.asar");
+  const { live: fluxerAsar, original: movedAsar, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
+  if (!existsSync(movedAsar) && existsSync(legacyOriginal)) {
+    mkdirSync(path.dirname(movedAsar), { recursive: true });
+    replaceWith(legacyOriginal, movedAsar);
+    replaceWith(`${legacyOriginal}.unpacked`, `${movedAsar}.unpacked`);
+  }
   if (existsSync(fluxerAsar) && !isInfluxShim(fluxerAsar)) {
+    mkdirSync(path.dirname(movedAsar), { recursive: true });
     replaceWith(fluxerAsar, movedAsar);
     replaceWith(`${fluxerAsar}.unpacked`, `${movedAsar}.unpacked`);
   }
@@ -198,8 +205,8 @@ function moveFluxerAside(resourcesDirectory: string): void {
 }
 
 function uninstall(resourcesDirectory: string): void {
-  const fluxerAsar = path.join(resourcesDirectory, "app.asar");
-  const movedAsar = path.join(resourcesDirectory, "_app.asar");
+  const { live: fluxerAsar, original: stableOriginal, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
+  const movedAsar = existsSync(stableOriginal) ? stableOriginal : legacyOriginal;
   if (!existsSync(movedAsar)) return;
   if (existsSync(fluxerAsar) && !isInfluxShim(fluxerAsar)) {
     rmSync(movedAsar, { force: true });
