@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { shouldEnhanceMonitorCapture, suggestCaptureUpgrade } from "./capture";
+import { applyCaptureUpgrade, shouldEnhanceMonitorCapture, suggestCaptureUpgrade } from "./capture";
 
 describe("FakePlutonium safe display capture enhancement", () => {
   it("targets 3840x1080 for the measured ultrawide source under 125% scaling", () => {
@@ -69,4 +69,44 @@ describe("FakePlutonium safe display capture enhancement", () => {
     expect(shouldEnhanceMonitorCapture(true, "monitor", "custom", "source", false, true)).toBe(false);
     expect(shouldEnhanceMonitorCapture(true, "monitor", "custom", "source", true, false)).toBe(false);
   });
+  it("applies upgraded dimensions and frame rate to the same capture track", async () => {
+    const calls: MediaTrackConstraints[] = [];
+    const track = {
+      getConstraints: () => ({ aspectRatio: { ideal: 3.55 } }),
+      applyConstraints: async (constraints: MediaTrackConstraints) => { calls.push(constraints); },
+    };
+    const result = await applyCaptureUpgrade(track, { width: 3840, height: 1080, frameRate: 60 });
+    expect(result).toEqual({ fallbackUsed: false });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.width).toEqual({ ideal: 3840 });
+    expect(calls[0]?.height).toEqual({ ideal: 1080 });
+    expect(calls[0]?.frameRate).toEqual({ ideal: 60, max: 60 });
+    expect(calls[0]?.aspectRatio).toEqual({ ideal: 3.55 });
+  });
+
+  it("retries resolution only if the browser rejects frame-rate constraints", async () => {
+    const calls: MediaTrackConstraints[] = [];
+    const track = {
+      getConstraints: () => ({}),
+      applyConstraints: async (constraints: MediaTrackConstraints) => {
+        calls.push(constraints);
+        if (constraints.frameRate !== undefined) throw new Error("Frame rate not supported");
+      },
+    };
+    const result = await applyCaptureUpgrade(track, { width: 3840, height: 1080, frameRate: 60 });
+    expect(result).toEqual({ fallbackUsed: true });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.frameRate).toBeUndefined();
+    expect(calls[1]?.width).toEqual({ ideal: 3840 });
+  });
+
+  it("surfaces a rejection only after both attempts fail", async () => {
+    const track = {
+      getConstraints: () => ({}),
+      applyConstraints: async () => { throw new Error("Unsupported"); },
+    };
+    await expect(applyCaptureUpgrade(track, { width: 3840, height: 1080, frameRate: 60 }))
+      .rejects.toThrow("Unsupported");
+  });
+
 });
