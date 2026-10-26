@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createPackage, extractFile } from "@electron/asar";
+import { createHash } from "node:crypto";
 
 import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
@@ -225,6 +226,10 @@ function isFluxerArchive(asarPath: string): boolean {
   }
 }
 
+function fileDigest(file: string): string {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
 function diagnoseResources(resourcesDirectory: string): void {
   const { live, original, legacyOriginal } = fluxerArchivePaths(resourcesDirectory);
   const previous = path.join(path.dirname(original), "previous-app.asar");
@@ -240,6 +245,32 @@ function diagnoseResources(resourcesDirectory: string): void {
           : "not a readable Fluxer archive";
     console.log(`  ${asarPath}: ${kind}${size === null ? "" : ` (${size} bytes)`}`);
     console.log(`    native files: ${existsSync(`${asarPath}.unpacked`) ? "present" : "missing"}`);
+  }
+
+  const installed = path.join(influxInstallDirectory, "main.js");
+  const expected = path.join(
+    localReleaseDirectory(compiled, root, process.execPath),
+    DESKTOP_ASSETS["main.js"],
+  );
+  console.log("Influx main.js diagnostics:");
+  if (!existsSync(installed)) {
+    console.log(`  installed: MISSING (${installed})`);
+  } else {
+    const code = readFileSync(installed, "utf8");
+    console.log(`  installed: ${installed}`);
+    console.log(`  SHA-256: ${fileDigest(installed)}`);
+    console.log(
+      `  supports influx-original layout: ${code.includes("influx-original") ? "yes" : "NO (older code)"}`,
+    );
+  }
+  if (existsSync(expected)) {
+    console.log(`  local artifact: ${expected}`);
+    console.log(`  local artifact SHA-256: ${fileDigest(expected)}`);
+    console.log(
+      `  installed matches local artifact: ${existsSync(installed) && fileDigest(installed) === fileDigest(expected) ? "YES" : "NO"}`,
+    );
+  } else {
+    console.log(`  local artifact: not found at ${expected}`);
   }
 }
 
