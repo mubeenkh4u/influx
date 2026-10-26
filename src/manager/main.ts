@@ -213,6 +213,24 @@ void app.whenReady().then(async () => {
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.on("render-process-gone", (_, details) => record("Renderer crashed: " + details.reason));
   await window.loadFile(path.join(app.getAppPath(), "index.html"));
+  if (process.argv.includes("--smoke-test")) {
+    try {
+      const result = await window.webContents.executeJavaScript(`({
+        title: document.title,
+        bridge: typeof window.InfluxManager?.snapshot === "function",
+        installation: document.getElementById("installation")?.textContent,
+        plugins: document.getElementById("plugin-count")?.textContent
+      })`);
+      if (result.title !== "Influx Manager" || !result.bridge || !result.installation || !result.plugins)
+        throw new Error("Dashboard did not initialize: " + JSON.stringify(result));
+      console.log("[Influx Manager] UI smoke test passed: " + JSON.stringify(result));
+      app.exit(0);
+    } catch (error) {
+      console.error("[Influx Manager] UI smoke test failed", error);
+      app.exit(1);
+    }
+    return;
+  }
   record("Influx Manager started");
 }).catch((error) => {
   record("Fatal startup error: " + String(error));
