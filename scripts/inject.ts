@@ -39,9 +39,14 @@ Usage: influx-installer [options]
   --local           Install release assets from this checkout or beside this installer
   --help            Show this help`;
 
-// Bun's compiled executable uses a virtual B:\\~BUN directory on Windows, even
-// though import.meta.url can still point at the build-time source file.
+// Bun standalone executables do not reliably expose virtual import.meta paths
+// on Linux, macOS, or Windows. The actual running executable is our installer,
+// not the Bun CLI, and its matching release assets must live alongside it.
+// Keep the virtual-path check for Bun versions that expose one.
+const executableName = path.basename(process.execPath).toLowerCase();
+const runningBunCli = /^(?:bun|bun-debug)(?:\\.exe)?$/.test(executableName);
 const compiled =
+  !runningBunCli ||
   /\\$bunfs|~BUN/i.test(import.meta.dir) ||
   /\\$bunfs|~BUN/i.test(import.meta.url);
 const root = path.dirname(import.meta.dir);
