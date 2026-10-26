@@ -6,7 +6,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { createPackage, extractFile } from "@electron/asar";
+import { createPackage, extractFile, uncache } from "@electron/asar";
 
 const repositoryRoot = path.dirname(import.meta.dir);
 const installer = path.join(repositoryRoot, "dist", "release", "influx-installer-windows-x64.exe");
@@ -18,6 +18,8 @@ const original = path.join(resources, "influx-original", "app.asar");
 const legacyOriginal = path.join(resources, "_app.asar");
 
 function pkg(file: string) {
+  // @electron/asar caches headers by path. Installation swaps app.asar in place.
+  uncache(file);
   return JSON.parse(extractFile(file, "package.json").toString("utf8")) as {
     name: string; main: string;
   };
