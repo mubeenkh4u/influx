@@ -36,7 +36,11 @@ Usage: influx-installer [options]
   --local           Install release assets from this checkout or beside this installer
   --help            Show this help`;
 
-const compiled = /\$bunfs|~BUN/i.test(import.meta.url);
+// Bun's compiled executable uses a virtual B:\\~BUN directory on Windows, even
+// though import.meta.url can still point at the build-time source file.
+const compiled =
+  /\\$bunfs|~BUN/i.test(import.meta.dir) ||
+  /\\$bunfs|~BUN/i.test(import.meta.url);
 const root = path.dirname(import.meta.dir);
 const options = process.argv.slice(2);
 const pathOption = options.includes("--path") ? options[options.indexOf("--path") + 1] : undefined;
