@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
 import { localReleaseDirectory } from "../src/shared/localRelease";
-import { DESKTOP_ASSETS, downloadDesktopRelease, installFiles } from "../src/shared/release";
+import { DESKTOP_ASSETS, LOCAL_BUILD_MARKER, downloadDesktopRelease, installFiles } from "../src/shared/release";
 import { fluxerArchivePaths, isFluxerDesktopPackage } from "../src/shared/archiveLayout";
 
 const SHIM_NAME = "influx-shim";
@@ -28,7 +28,8 @@ const USAGE = `Installs Influx into the Fluxer desktop app.
 
 Usage: influx-installer [options]
 
-  (no options)      Install the latest Influx release; it updates itself from then on
+  (no options)      Compiled installer: use matching local artifact; source: upstream
+  --upstream        Explicitly install the official upstream Influx release
   --canary          Use Fluxer Canary (picked automatically when only Canary is installed)
   --stable          Use stable Fluxer even when only Canary is found
   --path <folder>   Fluxer's resources folder, or its .app bundle on macOS
@@ -46,15 +47,19 @@ const compiled =
 const root = path.dirname(import.meta.dir);
 const options = process.argv.slice(2);
 const pathOption = options.includes("--path") ? options[options.indexOf("--path") + 1] : undefined;
+// A standalone compiled test bundle MUST NOT silently download upstream Influx:
+// doing so replaces the fork with a main.js that still expects _app.asar.
 const mode = options.includes("--diagnose")
   ? "diagnose"
   : options.includes("--uninstall")
     ? "uninstall"
-  : options.includes("--development")
-    ? "development"
-    : options.includes("--local")
-      ? "local"
-      : "release";
+    : options.includes("--development")
+      ? "development"
+      : options.includes("--upstream")
+        ? "release"
+        : options.includes("--local") || compiled
+          ? "local"
+          : "release";
 
 const sudoUser = process.platform === "linux" ? process.env.SUDO_USER : undefined;
 const homeDirectory = sudoUser ? `/home/${sudoUser}` : os.homedir();
@@ -125,14 +130,31 @@ async function installRelease(installDirectory: string): Promise<string> {
           "Download and extract the complete Actions artifact, or run `bun run build --release`.",
       );
     mkdirSync(installDirectory, { recursive: true });
-    for (const [localName, assetName] of Object.entries(DESKTOP_ASSETS)) {
-      copyFileSync(path.join(releaseDirectory, assetName), path.join(installDirectory, localName));
+    const expectedMain = path.join(releaseDirectory, DESKTOP_ASSETS["main.js"]);
+    if (!readFileSync(expectedMain, "utf8").includes("influx-original")) {
+      throw new Error(
+        "This bundled main.js does not contain the new Fluxer archive layout. " +
+          "Download the latest successful artifact from the fork's Windows Test Build.",
+      );
     }
+    for (const [localName, assetName] of Object.entries(DESKTOP_ASSETS)) {
+      const source = path.join(releaseDirectory, assetName);
+      const target = path.join(installDirectory, localName);
+      copyFileSync(source, target);
+      if (fileDigest(source) !== fileDigest(target))
+        throw new Error(`Copied Influx file failed checksum verification: ${localName}`);
+    }
+    writeFileSync(
+      path.join(installDirectory, LOCAL_BUILD_MARKER),
+      "Locally packaged fork: only update through the matching GitHub Actions artifact.\\n",
+    );
+    console.log("Verified: installed main.js matches the local forked artifact.");
     return "local release build";
   }
   console.log("Downloading the latest Influx release…");
   const release = await fetchLatestRelease();
   installFiles(installDirectory, await downloadDesktopRelease(release));
+  rmSync(path.join(installDirectory, LOCAL_BUILD_MARKER), { force: true });
   return `Influx ${release.version}`;
 }
 
