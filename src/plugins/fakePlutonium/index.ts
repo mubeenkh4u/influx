@@ -120,16 +120,27 @@ async function enhanceCapturedTrack(
   stream: MediaStream,
   options?: DisplayMediaStreamOptions,
 ): Promise<void> {
-  const videoOptions = options?.video;
-  const displaySurface =
-    videoOptions && typeof videoOptions === "object"
-      ? (videoOptions as MediaTrackConstraints & { displaySurface?: string }).displaySurface
-      : undefined;
-
   if (window.location.protocol !== "fluxer-app:") {
     setLastCapture("not-desktop");
     return;
   }
+
+  const track = stream.getVideoTracks()[0];
+  if (!track || track.readyState !== "live") {
+    setLastCapture("no-video-track");
+    return;
+  }
+
+  const videoOptions = options?.video;
+  const requestedSurface =
+    videoOptions && typeof videoOptions === "object"
+      ? (videoOptions as MediaTrackConstraints & { displaySurface?: string }).displaySurface
+      : undefined;
+  // Fluxer may omit the surface hint in its initial getDisplayMedia call.
+  // The captured track's actual displaySurface is more authoritative.
+  const observedSurface =
+    (track.getSettings() as MediaTrackSettings & { displaySurface?: string }).displaySurface;
+  const displaySurface = observedSurface ?? requestedSurface;
 
   if (displaySurface !== "monitor") {
     setLastCapture("not-monitor");
@@ -150,12 +161,6 @@ async function enhanceCapturedTrack(
     settings.store.enhanceSourceCapture,
   )) {
     setLastCapture("not-custom-source");
-    return;
-  }
-
-  const track = stream.getVideoTracks()[0];
-  if (!track || track.readyState !== "live") {
-    setLastCapture("no-video-track");
     return;
   }
 
