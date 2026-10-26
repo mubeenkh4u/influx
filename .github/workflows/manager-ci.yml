@@ -50,6 +50,13 @@ jobs:
         run: bun run build:manager
       - name: Bundle Electron
         run: bun run package:manager
+      - name: Smoke-test Linux dashboard in virtual display
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          xvfb-run -a dist/manager/packages/influx-manager-linux-x64/influx-manager --no-sandbox --smoke-test
       - name: Archive Linux package
         if: runner.os == 'Linux'
         shell: bash
