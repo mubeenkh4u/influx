@@ -215,7 +215,7 @@ function isFluxerArchive(asarPath: string): boolean {
   }
   try {
     // A plausible package.json isn't enough: the actual Electron entry must exist.
-    extractFile(asarPath, pkg.main);
+    extractFile(asarPath, path.normalize(pkg.main));
     return true;
   } catch (error) {
     if (mode === "diagnose")
