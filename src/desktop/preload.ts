@@ -18,9 +18,23 @@ if (process.isMainFrame && FLUXER_APP_ORIGINS.includes(location.origin)) {
     },
   } satisfies InfluxNative);
 
-  const code: string = ipcRenderer.sendSync(IPC_GET_RENDERER);
+  const payload: {
+    renderer: string;
+    plugins: Array<{ id: string; name: string; version: string; code: string }>;
+  } = ipcRenderer.sendSync(IPC_GET_RENDERER);
   contextBridge.executeInMainWorld({
-    func: (source: string) => (0, eval)(source),
-    args: [`${code}\n//# sourceURL=influx-renderer.js`],
+    func: (input) => {
+      Object.defineProperty(window, "__influxExternalPlugins", {
+        value: input.plugins,
+        configurable: true,
+      });
+      try {
+        (0, eval)(input.renderer + "\n//# sourceURL=influx-renderer.js");
+      } finally {
+        delete (window as typeof window & { __influxExternalPlugins?: unknown })
+          .__influxExternalPlugins;
+      }
+    },
+    args: [payload],
   });
 }
