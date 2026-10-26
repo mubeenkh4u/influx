@@ -1,10 +1,7 @@
 import {
   chownSync,
-  closeSync,
   copyFileSync,
   existsSync,
-  ftruncateSync,
-  openSync,
   readFileSync,
   mkdirSync,
   mkdtempSync,
@@ -13,12 +10,11 @@ import {
   rmSync,
   statSync,
   writeFileSync,
-  writeSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { createPackage, extractFile, getRawHeader } from "@electron/asar";
+import { createPackage, extractFile } from "@electron/asar";
 
 import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
@@ -319,50 +315,6 @@ function uninstall(resourcesDirectory: string): void {
   }
 }
 
-/**
- * Bun's compiled Windows runtime can leave the ASAR data section short while
- * @electron/asar's JSON header still advertises the full file sizes.
- * Write the two shim payloads at their exact header offsets synchronously and
- * verify extraction before any original Fluxer archive is moved.
- */
-function finalizeShimArchive(asarPath: string, stagingDirectory: string): void {
-  const fd = openSync(asarPath, "r+");
-  try {
-    // Use the exact data offset from the ASAR pickle reader. The pickle has
-    // framing bytes that must not be mistaken for the JSON header size.
-    const { header: parsedHeader, headerSize } = getRawHeader(asarPath);
-    const dataStart = 8 + headerSize;
-    if (!Number.isSafeInteger(dataStart) || dataStart < 16)
-      throw new Error("Shim ASAR header size is invalid");
-    const header = parsedHeader as {
-      files: Record<string, { offset?: string; size?: number; unpacked?: boolean }>;
-    };
-    let dataEnd = dataStart;
-    for (const name of ["package.json", "index.js"]) {
-      const entry = header.files?.[name];
-      const bytes = readFileSync(path.join(stagingDirectory, name));
-      const offset = Number(entry?.offset);
-      if (entry?.unpacked || !Number.isSafeInteger(offset) || offset < 0 ||
-          entry?.size !== bytes.length)
-        throw new Error(`Invalid ASAR entry for ${name}`);
-      const location = dataStart + offset;
-      if (!Number.isSafeInteger(location) || location < dataStart)
-        throw new Error(`Unsafe ASAR offset for ${name}`);
-      writeSync(fd, bytes, 0, bytes.length, location);
-      dataEnd = Math.max(dataEnd, location + bytes.length);
-    }
-    ftruncateSync(fd, dataEnd);
-  } finally {
-    closeSync(fd);
-  }
-  for (const name of ["package.json", "index.js"]) {
-    const expected = readFileSync(path.join(stagingDirectory, name));
-    const actual = extractFile(asarPath, name);
-    if (!expected.equals(actual))
-      throw new Error(`Shim ASAR verification failed for ${name}; refusing to install`);
-  }
-}
-
 async function buildShim(mainScript: string, destination: string): Promise<void> {
   const staging = mkdtempSync(path.join(os.tmpdir(), "influx-shim-"));
   try {
@@ -373,7 +325,15 @@ async function buildShim(mainScript: string, destination: string): Promise<void>
     writeFileSync(path.join(staging, "index.js"), `require(${JSON.stringify(mainScript)});\n`);
     rmSync(destination, { force: true });
     await createPackage(staging, destination);
-    finalizeShimArchive(destination, staging);
+    // Never move Fluxer's real app.asar until the generated shim can be read back.
+    // A compile-time ASAR header cache can be stale after replacement, but this
+    // staging path is unique to a single installer invocation.
+    for (const name of ["package.json", "index.js"]) {
+      const expected = readFileSync(path.join(staging, name));
+      const actual = extractFile(destination, name);
+      if (!expected.equals(actual))
+        throw new Error(`Shim ASAR verification failed for ${name}; refusing to install`);
+    }
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }
