@@ -47,3 +47,33 @@ Pull request builds run automatically in **Actions > Windows Test Build**. Open 
 The **`--local`** flag is important: without it, the compiled installer still downloads upstream Influx. The action produces an experimental build, not a GitHub Release. Keep the ZIP only for testing and do not merge the draft PR without a real desktop smoke test.
 
 The `workflow_dispatch` manual **Run workflow** button generally requires the workflow to exist on the default branch. Until the PR is merged, use the automatic PR run instead.
+
+## Windows startup error: Invalid package `_app.asar`
+
+The old upstream Influx shim reads `resources/_app.asar`. The branch's installer
+migrates a **valid** legacy archive to `resources/influx-original/app.asar`,
+and the updated Influx bootstrap checks the archive before attempting to launch Fluxer.
+
+The Windows test build now exercises a compiled installer against disposable
+ASAR fixtures for fresh installation, full uninstall, legacy migration, and
+missing/corrupt original backups. These tests cannot prove compatibility with
+every released Fluxer desktop version.
+
+**Recovery without deleting your Fluxer profile:**
+
+1. Download and extract the **latest successful** Windows Test Build artifact.
+2. Exit Fluxer completely, then run
+   `./influx-installer-windows-x64.exe --diagnose` from PowerShell in that folder.
+   This command does not modify files.
+3. If either `influx-original/app.asar` or `_app.asar` reports
+   **valid Fluxer desktop**, run `./influx-installer-windows-x64.exe --uninstall`
+   and verify the stock Fluxer client opens. Exit Fluxer again.
+4. Then run `./influx-installer-windows-x64.exe --local` to install the
+   **forked** assets, not upstream Influx.
+5. If all original archives report **MISSING** or **not a readable Fluxer archive**,
+   do not force an uninstall or rename archives manually. Repair/reinstall the
+   official Fluxer desktop app first without deleting your user profile, verify
+   it starts normally, and repeat steps 2–4.
+
+If Fluxer opens but `window.Influx` is missing in DevTools, the remaining problem
+is Electron injection/preload compatibility rather than an invalid archive.
