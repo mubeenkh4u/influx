@@ -168,7 +168,7 @@ function saveDeleted(message: FluxerMessage) {
 function withCurrentUsers(wire: MessageWire): MessageWire {
   const users = Stores.Users();
   return withUsers(wire, (user) => {
-    const current = users?.getUser(user.id)?.toJSON();
+    const current = users?.getUser?.(user.id)?.toJSON();
     return current ? publicUser({ ...user, ...current }) : user;
   });
 }
