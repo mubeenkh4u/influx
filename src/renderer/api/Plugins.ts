@@ -12,6 +12,7 @@ export interface PluginDefinition {
   patches?: PatchDefinition[];
   settings?: PluginSettings<any>;
   required?: boolean;
+  externallyManaged?: boolean;
   start?(): void;
   stop?(): void;
 }
@@ -27,7 +28,7 @@ const started = new Set<string>();
 const enabledAtStartup = new Map<string, boolean>();
 
 export function isPluginEnabled(plugin: PluginDefinition): boolean {
-  return plugin.required || (getPluginData(plugin.name).enabled ?? false);
+  return plugin.required || plugin.externallyManaged || (getPluginData(plugin.name).enabled ?? false);
 }
 
 export function registerPlugins(list: PluginDefinition[]): void {
@@ -82,6 +83,7 @@ export function startAllPlugins(): void {
 }
 
 export function setPluginEnabled(plugin: PluginDefinition, enabled: boolean): void {
+  if (plugin.externallyManaged) throw new Error('External plugins are managed by Influx Manager');
   getPluginData(plugin.name).enabled = enabled;
   saveSettings();
 
