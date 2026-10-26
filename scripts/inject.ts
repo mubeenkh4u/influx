@@ -17,6 +17,7 @@ import { createPackage, extractFile } from "@electron/asar";
 
 import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
+import { localReleaseDirectory } from "../src/shared/localRelease";
 import { DESKTOP_ASSETS, downloadDesktopRelease, installFiles } from "../src/shared/release";
 import { fluxerArchivePaths } from "../src/shared/archiveLayout";
 
@@ -31,7 +32,7 @@ Usage: influx-installer [options]
   --path <folder>   Fluxer's resources folder, or its .app bundle on macOS
   --uninstall       Remove Influx and restore Fluxer's original files
   --development     Install this checkout's build (source checkout only)
-  --local           Install this checkout's release build (source checkout only)
+  --local           Install release assets from this checkout or beside this installer
   --help            Show this help`;
 
 const compiled = /\$bunfs|~BUN/i.test(import.meta.url);
@@ -105,9 +106,15 @@ function giveToSudoUser(target: string): void {
 
 async function installRelease(installDirectory: string): Promise<string> {
   if (mode === "local") {
-    const releaseDirectory = path.join(root, "dist", "release");
-    if (!existsSync(releaseDirectory))
-      throw new Error("dist/release not found. Run `bun run build --release` first.");
+    const releaseDirectory = localReleaseDirectory(compiled, root, process.execPath);
+    const missing = Object.values(DESKTOP_ASSETS).filter(
+      (asset) => !existsSync(path.join(releaseDirectory, asset)),
+    );
+    if (missing.length)
+      throw new Error(
+        `Missing local release files in ${releaseDirectory}: ${missing.join(", ")}. ` +
+          "Download and extract the complete Actions artifact, or run `bun run build --release`.",
+      );
     mkdirSync(installDirectory, { recursive: true });
     for (const [localName, assetName] of Object.entries(DESKTOP_ASSETS)) {
       copyFileSync(path.join(releaseDirectory, assetName), path.join(installDirectory, localName));
@@ -125,10 +132,8 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  if (compiled && (mode === "development" || mode === "local")) {
-    throw new Error(
-      `--${mode} needs a source checkout of Influx; run it with \`bun run inject --${mode}\`.`,
-    );
+  if (compiled && mode === "development") {
+    throw new Error("--development needs a source checkout: run `bun run inject --development`.");
   }
   const resourcesDirectory = fluxerResourcesDirectory();
   if (!hasFluxer(resourcesDirectory)) {
