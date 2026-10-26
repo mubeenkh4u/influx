@@ -43,7 +43,7 @@ jobs:
       - name: Install Electron runtime
         run: bun install --frozen-lockfile
       - name: Download Electron runtime
-        run: bun pm trust electron
+        run: node node_modules/electron/install.js
       - name: Build core
         run: bun run build --release
       - name: Build manager
