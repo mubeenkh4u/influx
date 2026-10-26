@@ -181,9 +181,9 @@ async function main(): Promise<void> {
   }
   if (!hasFluxer(resourcesDirectory)) {
     const linuxHint = process.platform === "linux"
-      ? "\\nTry locating Fluxer's actual archive: " +
+      ? "\nTry locating Fluxer's actual archive: " +
         'find /opt /usr/lib /usr/share /usr/local "$HOME" -type f -name app.asar -print 2>/dev/null' +
-        "\\nThen pass --path /full/path/to/app.asar (or its resources folder). " +
+        "\nThen pass --path /full/path/to/app.asar (or its resources folder). " +
         "Flatpak and mounted AppImage resources are not supported for direct patching; " +
         "use a writable native installation or extracted tar.gz instead."
       : "";
