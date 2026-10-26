@@ -141,5 +141,6 @@ buttonHandler("uninstall", () => api.uninstall(), "Fluxer restored. External plu
 buttonHandler("import-plugin", () => api.importPlugin(), "Import dialog closed. Review any new plugin before approving.");
 buttonHandler("open-plugins", () => api.openPlugins(), "Opened plugin folder.");
 buttonHandler("open-logs", () => api.openLogs(), "Opened manager log.");
+buttonHandler("refresh", () => api.snapshot(), "Plugin directory refreshed.");
 
 void perform(() => api.snapshot(), "Manager is ready.");
