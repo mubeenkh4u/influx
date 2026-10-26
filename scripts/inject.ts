@@ -195,7 +195,9 @@ function readAsarPackage(asarPath: string): Record<string, unknown> | null {
   try {
     const pkg: unknown = JSON.parse(extractFile(asarPath, "package.json").toString("utf8"));
     return typeof pkg === "object" && pkg !== null ? (pkg as Record<string, unknown>) : null;
-  } catch {
+  } catch (error) {
+    if (mode === "diagnose")
+      console.log(`    package read error at ${asarPath}: ${String(error)}`);
     return null;
   }
 }
@@ -206,12 +208,18 @@ function isInfluxShim(asarPath: string): boolean {
 
 function isFluxerArchive(asarPath: string): boolean {
   const pkg = readAsarPackage(asarPath);
-  if (!isFluxerDesktopPackage(pkg)) return false;
+  if (!isFluxerDesktopPackage(pkg)) {
+    if (mode === "diagnose" && pkg !== null)
+      console.log(`    package name/main mismatch at ${asarPath}: ${JSON.stringify(pkg)}`);
+    return false;
+  }
   try {
     // A plausible package.json isn't enough: the actual Electron entry must exist.
     extractFile(asarPath, pkg.main);
     return true;
-  } catch {
+  } catch (error) {
+    if (mode === "diagnose")
+      console.log(`    main entry read error (${pkg.main}) at ${asarPath}: ${String(error)}`);
     return false;
   }
 }
