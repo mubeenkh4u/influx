@@ -6,7 +6,6 @@ import {
   ftruncateSync,
   openSync,
   readFileSync,
-  readSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -19,7 +18,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { createPackage, extractFile } from "@electron/asar";
+import { createPackage, extractFile, getRawHeader } from "@electron/asar";
 
 import { fetchLatestRelease, NoReleaseError } from "../src/shared/github";
 import { influxDataDirectory } from "../src/shared/paths";
@@ -329,19 +328,13 @@ function uninstall(resourcesDirectory: string): void {
 function finalizeShimArchive(asarPath: string, stagingDirectory: string): void {
   const fd = openSync(asarPath, "r+");
   try {
-    const prefix = Buffer.alloc(16);
-    if (readSync(fd, prefix, 0, prefix.length, 0) !== 16)
-      throw new Error("Shim ASAR is missing its header");
-    const headerLength = prefix.readUInt32LE(12);
-    const dataStart = 8 + prefix.readUInt32LE(4);
-    if (headerLength === 0 || headerLength > 4 * 1024 * 1024 || dataStart < 16 ||
-        dataStart > 4 * 1024 * 1024)
-      throw new Error("Shim ASAR header length is invalid");
-    const headerBytes = Buffer.alloc(headerLength);
-    if (readSync(fd, headerBytes, 0, headerLength, 16) !== headerLength)
-      throw new Error("Shim ASAR JSON header is truncated");
-
-    const header = JSON.parse(headerBytes.toString("utf8")) as {
+    // Use the exact data offset from the ASAR pickle reader. The pickle has
+    // framing bytes that must not be mistaken for the JSON header size.
+    const { header: parsedHeader, headerSize } = getRawHeader(asarPath);
+    const dataStart = 8 + headerSize;
+    if (!Number.isSafeInteger(dataStart) || dataStart < 16)
+      throw new Error("Shim ASAR header size is invalid");
+    const header = parsedHeader as {
       files: Record<string, { offset?: string; size?: number; unpacked?: boolean }>;
     };
     let dataEnd = dataStart;
