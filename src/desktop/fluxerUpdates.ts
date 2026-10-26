@@ -53,21 +53,36 @@ function windowsScript(shim: string, restart: boolean): string {
 $ErrorActionPreference = 'Stop'
 $resources = ${quotePowerShell(process.resourcesPath)}
 $fluxerAsar = Join-Path $resources 'app.asar'
-$movedAsar = Join-Path $resources '_app.asar'
+$originalDirectory = Join-Path $resources 'influx-original'
+$movedAsar = Join-Path $originalDirectory 'app.asar'
+$previousAsar = Join-Path $originalDirectory 'previous-app.asar'
 $stagedShim = Join-Path $resources '.influx-shim.asar'
 try {
   Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue
   Get-Process -Name Update -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -eq ${quotePowerShell(updateExecutable)} } |
     Wait-Process -Timeout 600
-  if ((Test-Path -LiteralPath $fluxerAsar) -and -not (Test-Path -LiteralPath $movedAsar)) {
-    New-Item -ItemType Directory -Force -Path $originalDirectory | Out-Null
-    Copy-Item -LiteralPath ${quotePowerShell(shim)} -Destination $stagedShim
-    Move-Item -LiteralPath $fluxerAsar -Destination $movedAsar
-    if (Test-Path -LiteralPath "$fluxerAsar.unpacked") {
-      Move-Item -LiteralPath "$fluxerAsar.unpacked" -Destination "$movedAsar.unpacked"
+  if (Test-Path -LiteralPath $fluxerAsar) {
+    # Do not replace the original archive with our own shim when no Fluxer update occurred.
+    $liveHash = (Get-FileHash -LiteralPath $fluxerAsar -Algorithm SHA256).Hash
+    $shimHash = (Get-FileHash -LiteralPath ${quotePowerShell(shim)} -Algorithm SHA256).Hash
+    if ($liveHash -ne $shimHash) {
+      New-Item -ItemType Directory -Force -Path $originalDirectory | Out-Null
+      Copy-Item -LiteralPath ${quotePowerShell(shim)} -Destination $stagedShim
+      if (Test-Path -LiteralPath $movedAsar) {
+        Remove-Item -LiteralPath $previousAsar -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "$previousAsar.unpacked" -Recurse -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $movedAsar -Destination $previousAsar
+        if (Test-Path -LiteralPath "$movedAsar.unpacked") {
+          Move-Item -LiteralPath "$movedAsar.unpacked" -Destination "$previousAsar.unpacked"
+        }
+      }
+      Move-Item -LiteralPath $fluxerAsar -Destination $movedAsar
+      if (Test-Path -LiteralPath "$fluxerAsar.unpacked") {
+        Move-Item -LiteralPath "$fluxerAsar.unpacked" -Destination "$movedAsar.unpacked"
+      }
+      Move-Item -LiteralPath $stagedShim -Destination $fluxerAsar
     }
-    Move-Item -LiteralPath $stagedShim -Destination $fluxerAsar
   }
 } finally {
   if ($${restart}) {
