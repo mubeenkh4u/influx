@@ -56,6 +56,7 @@ h3 { font-size: 15px; margin: 0; font-weight: 690; }
 .button.ghost:hover { background: #232b41; }
 .button.danger { margin-left: auto; color: #f8a9b5; background: #44253555; border-color: #633346; }
 .button.danger:hover { background: #54283b; }
+.button[hidden] { display: none; }
 .button:disabled, .busy .button { opacity: .42; cursor: not-allowed; pointer-events: none; }
 .state { text-transform: capitalize; font-size: 11px; font-weight: 700; padding: 6px 10px;
   border: 1px solid #505972; background: #303750; color: #c4cde0; border-radius: 18px; }
