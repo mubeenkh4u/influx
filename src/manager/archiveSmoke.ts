@@ -11,16 +11,15 @@ import {
   uninstallInflux,
 } from "./installation";
 
-export async function runPhysicalArchiveSmoke(): Promise<void> {
+export async function runPhysicalArchiveSmoke(bundledCoreDirectory: string): Promise<void> {
   const io: typeof nodeFs = process.versions.electron ? require("original-fs") : nodeFs;
   const root = io.mkdtempSync(path.join(os.tmpdir(), "influx-archive-smoke-"));
   try {
     const original = path.join(root, "original");
     const resources = path.join(root, "resources");
     const legacy = path.join(resources, "influx-original");
-    const core = path.join(root, "core");
     const data = path.join(root, "user-data");
-    for (const folder of [original, resources, legacy, core]) io.mkdirSync(folder);
+    for (const folder of [original, resources, legacy]) io.mkdirSync(folder);
     io.writeFileSync(path.join(original, "package.json"), JSON.stringify({
       name: "fluxer_desktop",
       version: "1.0.0",
@@ -34,9 +33,7 @@ export async function runPhysicalArchiveSmoke(): Promise<void> {
         !io.lstatSync(physicalArchive).isFile())
       throw new Error("Failed to detect physical Fluxer archive: " + JSON.stringify(originalInfo));
     io.copyFileSync(physicalArchive, path.join(legacy, "app.asar"));
-    for (const filename of ["main.js", "preload.js", "renderer.js"])
-      io.writeFileSync(path.join(core, filename), "// synthetic " + filename + "\n");
-    await installInflux(resources, core, data);
+    await installInflux(resources, bundledCoreDirectory, data);
     if (installationStatus(resources).state !== "installed" ||
         inspectArchive(physicalArchive).kind !== "shim")
       throw new Error("Failed to recognize installed Influx shim");
