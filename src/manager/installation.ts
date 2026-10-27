@@ -97,6 +97,30 @@ export function installationDiagnostics(resourcesDirectory: string): string {
     if (info.version) lines.push("  Version: " + info.version);
     if (info.main) lines.push("  Entry point: " + info.main);
   }
+  const legacyPath = path.join(directory, "influx-original");
+  if (existsSync(legacyPath)) {
+    lines.push("", "Previous Influx installation directory: " + legacyPath);
+    for (const relative of ["", "resources"]) {
+      const folder = path.join(legacyPath, relative);
+      try {
+        const entries = readdirSync(folder, { withFileTypes: true }).slice(0, 35);
+        lines.push("  Contents of " + (relative || ".") + ":");
+        for (const entry of entries) {
+          const candidate = path.join(folder, entry.name);
+          if (entry.name.toLowerCase().endsWith(".asar")) {
+            const details = inspectArchive(candidate);
+            lines.push("    " + entry.name + ": " + archiveDescription(details) +
+              (details.sizeBytes === undefined ? "" : " (" + details.sizeBytes + " bytes)"));
+          } else {
+            lines.push("    " + entry.name + (entry.isDirectory() ? "/" : ""));
+          }
+        }
+      } catch (error) {
+        if (relative === "") lines.push("  Could not inspect directory: " + String(error));
+      }
+    }
+    lines.push("Do not move or rename files from this directory until their origin is verified.");
+  }
   lines.push(
     "",
     "No files were modified by this diagnostic.",
