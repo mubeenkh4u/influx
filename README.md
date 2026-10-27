@@ -1,6 +1,6 @@
 # Influx — Plug-and-Play Manager (Development Branch)
 
-> **Work in progress — not a release.** This is the `feat/plug-and-play-manager` branch of [mubeenkh4u/influx](https://github.com/mubeenkh4u/influx). It is being developed independently of `main`. The desktop manager, installation workflows, and end-to-end validation are **not complete**. Do not rely on this branch for a production Fluxer installation.
+> **Preview development — not a stable release.** This is the `feat/plug-and-play-manager` branch of [mubeenkh4u/influx](https://github.com/mubeenkh4u/influx). It is being developed independently of `main`. The initial manager and portable preview packages are implemented. Real Fluxer installation testing and production validation are still pending. Back up Fluxer before trying this branch.
 
 **Goal:** Keep Fluxer as the chat client and Influx as its injected mod core, while adding a separate Electron **Influx Manager** for installing and managing plugins stored on disk. Adding or updating a compatible plugin should *not* require rebuilding Influx or repacking Fluxer's `app.asar`.
 
@@ -9,16 +9,16 @@
 | Area | Status | Notes |
 | --- | --- | --- |
 | Separate feature branch | Done | `main` is unaffected |
-| External plugin manifest and registry | Implemented; not yet verified | Validates plugin metadata, keeps approved code hashes and enabled state |
-| Manual plugin directory and import functions | Implemented; not yet verified | Supports plugin folders containing `manifest.json` and bundled `index.js` |
-| Renderer startup integration | Implemented; not yet verified | Loads approved external plugins before Fluxer's webpack patch hook is installed |
-| Influx plugin settings integration | Implemented; not yet verified | Marks externally managed plugins as manager-controlled |
-| Electron Manager user interface | **Not yet complete** | Planned: install/repair, plugin import, approve, enable/disable, remove and logs |
-| Windows/Linux installer packaging | **Not yet complete** | No tested distributable from this branch yet |
-| Automated tests / integration testing | **Pending** | Tests have been added, but no passing CI or live Fluxer validation is claimed |
+| External plugin manifest and registry | Implemented; unit tests passed | Validates plugin metadata, keeps approved code hashes and enabled state |
+| Manual plugin directory and import functions | Implemented; unit tests passed | Supports plugin folders containing `manifest.json` and bundled `index.js` |
+| Renderer startup integration | Implemented; live Fluxer testing pending | Loads approved external plugins before Fluxer's webpack patch hook is installed |
+| Influx plugin settings integration | Implemented; live Fluxer testing pending | Marks externally managed plugins as manager-controlled |
+| Electron Manager user interface | Implemented; Linux dashboard smoke test passed | Install/repair, import, approve, enable/disable, remove, refresh and logs |
+| Windows/Linux packages | Portable CI preview archives built | Signed production installers are not available |
+| Automated tests / integration testing | Initial CI verification passing | Real Fluxer compatibility and Linux privilege prompts need on-device tests |
 | Plugin SDK and real plugin migration | **Pending** | Sample plugin is illustrative; FakePlutonium has not been migrated |
 
-This table describes code progress, **not** a guarantee of working functionality. Status will be updated as features are tested.
+Automated type-checking, unit tests, builds and a Linux virtual-display Electron smoke test have passed. These checks do **not** establish compatibility with a real Fluxer installation.
 
 ## Planned experience
 
@@ -69,8 +69,8 @@ External plugins are **untrusted until approved**. Modifying a previously approv
 
 - Plugin runtime loading only applies to the desktop client. Browser-extension support is not part of this work yet.
 - Startup webpack patches must register before the related modules execute; enabling or updating patch-based plugins requires a Fluxer restart.
-- Installing a plugin in the directory alone does not authorize execution. Manager approval UI is under construction.
-- Fluxer updates may replace the Influx shim. Recovery, repair and reinjection need cross-platform testing.
+- Installing a plugin in the directory alone does not authorize execution. Review and approve it in the manager, then restart Fluxer.
+- Fluxer updates may replace the shim. Repair and reinjection still need on-device validation. Root-owned Linux installations require a polkit authentication agent for the included elevation helper.
 - This fork's updater has been switched to `mubeenkh4u/influx`, but **no verified manager release has been published**. The upstream installer link below is for upstream stable Influx, *not* this experimental branch.
 
 ## Build and testing (developer workflow)
@@ -84,8 +84,17 @@ bun test
 bun run lint
 bun run fmt
 bun run build
+bun run build:manager
 ```
 
+To create a portable Windows or Linux preview, download Electron's runtime and run the packaging command:
+
+```sh
+node node_modules/electron/install.js
+bun run package:manager
+```
+
+Packages are written to `dist/manager/packages/`. CI also publishes experimental Windows and Linux preview archives in [Manager checks](https://github.com/mubeenkh4u/influx/actions/workflows/manager-ci.yml). These archives are unsigned; they have not been verified against a live Fluxer installation.
 To inject a built development version into a local Fluxer installation:
 
 ```sh
