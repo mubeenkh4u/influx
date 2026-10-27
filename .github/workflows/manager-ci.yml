@@ -50,6 +50,8 @@ jobs:
         run: bun run build --release
       - name: Build manager
         run: bun run build:manager
+      - name: Test backup recovery on runner OS
+        run: bun test src/manager/installation.test.ts
       - name: Bundle Electron
         run: bun run package:manager
       - name: Smoke-test Linux dashboard in virtual display
