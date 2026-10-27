@@ -19,7 +19,7 @@ async function setup(): Promise<{ root: string; resources: string; core: string;
   mkdirSync(core);
   mkdirSync(original);
   writeFileSync(path.join(original, "package.json"),
-    JSON.stringify({ name: "fluxer-desktop", version: "1.0.0", main: "index.js" }));
+    JSON.stringify({ name: "fluxer_desktop", version: "1.0.0", main: "index.js" }));
   writeFileSync(path.join(original, "index.js"), "console.log('original Fluxer');\n");
   await createPackage(original, path.join(resources, "app.asar"));
   for (const file of ["main.js", "preload.js", "renderer.js"]) {
