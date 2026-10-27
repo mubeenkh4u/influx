@@ -104,6 +104,79 @@ export function installationDiagnostics(resourcesDirectory: string): string {
   return lines.join("\n");
 }
 
+
+export interface BackupRecoveryResult {
+  restored: string;
+  preservedOldBackup?: string;
+}
+
+export function restoreFluxerBackup(resourcesDirectory: string, candidatePath: string): BackupRecoveryResult {
+  const resources = path.resolve(resourcesDirectory);
+  const current = inspectArchive(path.join(resources, "app.asar"));
+  if (current.kind !== "shim" || installationStatus(resources).state !== "broken")
+    throw new Error("Recovery is only allowed for an Influx shim without a verified Fluxer backup");
+  const candidate = path.resolve(candidatePath);
+  const destination = path.join(resources, "_app.asar");
+  if (candidate === path.join(resources, "app.asar") || candidate === destination)
+    throw new Error("Select the genuine original Fluxer archive, not the shim or current backup");
+  const original = inspectArchive(candidate);
+  if (original.kind !== "fluxer" || !original.main)
+    throw new Error("Selected file is not a verified Fluxer app.asar with an entry point");
+  const companion = candidate + ".unpacked";
+  if (existsSync(companion) && !lstatSync(companion).isDirectory())
+    throw new Error("The selected archive has an invalid .unpacked companion folder");
+  const suffix = Date.now().toString(36) + "-" + randomBytes(4).toString("hex");
+  const staged = path.join(resources, ".influx-recovery-" + suffix + ".asar");
+  const stagedUnpacked = staged + ".unpacked";
+  const oldBackup = path.join(resources, ".influx-old-backup-" + suffix + ".asar");
+  const oldUnpacked = oldBackup + ".unpacked";
+  const destinationUnpacked = destination + ".unpacked";
+  let movedOld = false;
+  let movedOldUnpacked = false;
+  let installed = false;
+  let installedUnpacked = false;
+  try {
+    copyFileSync(candidate, staged);
+    if (inspectArchive(staged).kind !== "fluxer")
+      throw new Error("Staged Fluxer archive could not be verified");
+    if (existsSync(companion)) cpSync(companion, stagedUnpacked, { recursive: true, force: false });
+    if (existsSync(destination)) {
+      renameSync(destination, oldBackup);
+      movedOld = true;
+    }
+    if (existsSync(destinationUnpacked)) {
+      renameSync(destinationUnpacked, oldUnpacked);
+      movedOldUnpacked = true;
+    }
+    renameSync(staged, destination);
+    installed = true;
+    if (existsSync(stagedUnpacked)) {
+      renameSync(stagedUnpacked, destinationUnpacked);
+      installedUnpacked = true;
+    }
+    if (installationStatus(resources).state !== "installed")
+      throw new Error("The recovered Fluxer archive failed final verification");
+    return {
+      restored: destination,
+      preservedOldBackup: movedOld ? oldBackup : undefined,
+    };
+  } catch (error) {
+    try {
+      if (installedUnpacked) rmSync(destinationUnpacked, { recursive: true, force: true });
+      if (installed) rmSync(destination, { force: true });
+      if (movedOldUnpacked) renameSync(oldUnpacked, destinationUnpacked);
+      if (movedOld) renameSync(oldBackup, destination);
+    } catch (rollbackError) {
+      throw new AggregateError([error, rollbackError],
+        "Backup recovery failed, and rollback requires manual inspection");
+    }
+    throw error;
+  } finally {
+    rmSync(staged, { force: true });
+    rmSync(stagedUnpacked, { recursive: true, force: true });
+  }
+}
+
 export function defaultFluxerPaths(): string[] {
   if (process.platform === "win32") {
     const base = process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local");
