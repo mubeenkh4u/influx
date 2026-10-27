@@ -69,6 +69,10 @@ External plugins are **untrusted until approved**. Modifying a previously approv
 
 Influx Manager may show **Broken** if the Influx `app.asar` shim is present, but its original Fluxer `_app.asar` backup is missing, unreadable, or not recognized. The old manager displayed one generic warning. The updated manager offers **Inspect files**, **Open resources**, and, when the shim itself is intact, **Restore verified backup**.
 
+**October 2026 ASAR detection fix:** Electron's regular `node:fs` API can report an ASAR archive as a virtual directory with zero bytes even while Windows File Explorer shows a valid physical file. The manager now uses Electron's `original-fs` for physical archive inspection, backup, rename, and rollback, while reading its own bundled core through the standard virtual ASAR filesystem. This prevents a false "not a regular ASAR file" result. It does **not** recreate a missing original Fluxer archive.
+
+If an older Influx installation left an `influx-original` folder in Fluxer's `resources` directory, **Inspect files** now lists its immediate contents and identifies any recognized ASAR archives. This folder is not automatically trusted or overwritten. A user-selected candidate must be reviewed and validated before recovery.
+
 1. Exit Fluxer completely, including its tray process, before making any repairs.
 2. Use **Inspect files** to review the ASAR status and package names. The inspection does not modify files. You can copy the report.
 3. Back up Fluxer's entire `resources` directory, including any `.unpacked` folders.
