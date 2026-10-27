@@ -3,14 +3,14 @@ import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileS
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 
 import {
   externalPluginsDirectory, importExternalPlugin, listExternalPlugins,
   setExternalPlugin,
 } from "../shared/externalPlugins";
 import { influxDataDirectory } from "../shared/paths";
-import { findFluxer, installInflux, installationStatus, stageCoreFiles, uninstallInflux } from "./installation";
+import { findFluxer, installInflux, installationDiagnostics, installationStatus, restoreFluxerBackup, stageCoreFiles, uninstallInflux } from "./installation";
 import type { ManagerSnapshot } from "./types";
 
 let window: BrowserWindow | null = null;
@@ -184,6 +184,57 @@ function registerHandlers(): void {
     }
     setExternalPlugin(id, action as "approve" | "enable" | "disable" | "remove");
     record("Plugin " + id + ": " + action);
+    return snapshot();
+  });
+  ipcMain.handle("manager:diagnose", async (event) => {
+    verifySender(event);
+    const report = installationDiagnostics(resourcesDirectory());
+    const result = await dialog.showMessageBox(window!, {
+      title: "Fluxer installation diagnostics",
+      type: "info",
+      message: "Inspection only — no files will be changed",
+      detail: report,
+      buttons: ["Close", "Copy diagnostic report"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (result.response === 1) clipboard.writeText(report);
+  });
+  ipcMain.handle("manager:open-resources", async (event) => {
+    verifySender(event);
+    const error = await shell.openPath(resourcesDirectory());
+    if (error) throw new Error(error);
+  });
+  ipcMain.handle("manager:recover-backup", async (event) => {
+    verifySender(event);
+    const resources = resourcesDirectory();
+    if (installationStatus(resources).state !== "broken")
+      throw new Error("Backup recovery is only available for a broken Influx installation");
+    const selection = await dialog.showOpenDialog(window!, {
+      title: "Select a clean Fluxer app.asar from a matching Fluxer installation",
+      defaultPath: resources,
+      properties: ["openFile"],
+      filters: [{ name: "Electron ASAR archives", extensions: ["asar"] }],
+    });
+    if (selection.canceled || !selection.filePaths[0]) return snapshot();
+    const answer = await dialog.showMessageBox(window!, {
+      type: "warning",
+      title: "Restore verified Fluxer backup",
+      message: "Have you fully exited Fluxer and confirmed that this is its original app.asar?",
+      detail:
+        "Only use a genuine archive from a matching Fluxer version. The manager will validate the archive, " +
+        "copy it to _app.asar, and keep any existing invalid backup under a different name. " +
+        "Your current Influx shim will not be replaced. Do not continue if you are unsure of the file.",
+      buttons: ["Cancel", "Verify and restore backup"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (answer.response !== 1) return snapshot();
+    const recovered = restoreFluxerBackup(resources, selection.filePaths[0]);
+    record("Verified Fluxer backup restored from user-selected archive. Preserved prior backup: " +
+      (recovered.preservedOldBackup ?? "none"));
     return snapshot();
   });
   ipcMain.handle("manager:install", async (event) => {
