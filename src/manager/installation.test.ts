@@ -1,10 +1,10 @@
 import { createPackage } from "@electron/asar";
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { installInflux, installationStatus, uninstallInflux } from "./installation";
+import { inspectArchive, installInflux, installationDiagnostics, installationStatus, restoreFluxerBackup, uninstallInflux } from "./installation";
 
 const fixtures: string[] = [];
 
@@ -71,4 +71,70 @@ test("missing core assets cannot alter the Fluxer installation", async () => {
   expect(installInflux(resources, core, data)).rejects.toThrow();
   expect(readFileSync(path.join(resources, "app.asar"))).toEqual(original);
   expect(installationStatus(resources).state).toBe("available");
+});
+
+test("missing Fluxer backup is reported precisely without changing files", async () => {
+  const { resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  rmSync(path.join(resources, "_app.asar"));
+  const before = readFileSync(path.join(resources, "app.asar"));
+  const status = installationStatus(resources);
+  expect(status.state).toBe("broken");
+  expect(status.details).toContain("file not found");
+  const report = installationDiagnostics(resources);
+  expect(report).toContain("_app.asar: file not found");
+  expect(report).toContain("No files were modified");
+  expect(readFileSync(path.join(resources, "app.asar"))).toEqual(before);
+  expect(() => uninstallInflux(resources)).toThrow();
+});
+
+test("unreadable original backup is blocked with a concrete diagnosis", async () => {
+  const { resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  writeFileSync(path.join(resources, "_app.asar"), "not an ASAR");
+  const backup = inspectArchive(path.join(resources, "_app.asar"));
+  expect(backup.kind).toBe("unreadable");
+  expect(installationStatus(resources).state).toBe("broken");
+  expect(installationDiagnostics(resources)).toContain("_app.asar: unreadable ASAR");
+});
+
+test("a genuine Fluxer backup can be explicitly restored without replacing the shim", async () => {
+  const { root, resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  const clean = path.join(root, "clean.asar");
+  copyFileSync(path.join(resources, "_app.asar"), clean);
+  mkdirSync(clean + ".unpacked");
+  writeFileSync(path.join(clean + ".unpacked", "native.txt"), "native");
+  const shim = readFileSync(path.join(resources, "app.asar"));
+  rmSync(path.join(resources, "_app.asar"));
+  expect(installationStatus(resources).state).toBe("broken");
+  const result = restoreFluxerBackup(resources, clean);
+  expect(result.restored).toBe(path.join(resources, "_app.asar"));
+  expect(result.preservedOldBackup).toBeUndefined();
+  expect(readFileSync(path.join(resources, "_app.asar"))).toEqual(readFileSync(clean));
+  expect(readFileSync(path.join(resources, "_app.asar.unpacked", "native.txt"), "utf8")).toBe("native");
+  expect(readFileSync(path.join(resources, "app.asar"))).toEqual(shim);
+  expect(installationStatus(resources).state).toBe("installed");
+});
+
+test("recovery preserves a damaged prior backup for manual investigation", async () => {
+  const { root, resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  const clean = path.join(root, "matching-fluxer.asar");
+  copyFileSync(path.join(resources, "_app.asar"), clean);
+  writeFileSync(path.join(resources, "_app.asar"), "previous damaged backup");
+  const result = restoreFluxerBackup(resources, clean);
+  expect(result.preservedOldBackup).toBeDefined();
+  expect(readFileSync(result.preservedOldBackup!, "utf8")).toBe("previous damaged backup");
+  expect(installationStatus(resources).state).toBe("installed");
+});
+
+test("recovery refuses shim archives and does not overwrite existing files", async () => {
+  const { resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  writeFileSync(path.join(resources, "_app.asar"), "prior damaged backup");
+  const original = readFileSync(path.join(resources, "_app.asar"));
+  expect(() => restoreFluxerBackup(resources, path.join(resources, "app.asar"))).toThrow();
+  expect(readFileSync(path.join(resources, "_app.asar"))).toEqual(original);
+  expect(installationStatus(resources).state).toBe("broken");
 });
