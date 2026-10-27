@@ -199,7 +199,7 @@ function registerHandlers(): void {
       cancelId: 0,
       noLink: true,
     });
-    if (result.response === 1) clipboard.writeText(report);
+    if (result.response === 1) await clipboard.writeText(report);
   });
   ipcMain.handle("manager:open-resources", async (event) => {
     verifySender(event);
