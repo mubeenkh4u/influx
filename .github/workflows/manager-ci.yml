@@ -29,6 +29,8 @@ jobs:
         run: bun run build --release
       - name: Build Influx Manager
         run: bun run build:manager
+      - name: Validate Linux helper executable
+        run: dist/manager/bin/influx-manager-helper --help
 
   package:
     needs: verify
