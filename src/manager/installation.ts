@@ -8,7 +8,7 @@ const physicalFs: typeof nodeFs = process.versions.electron
 
 const {
   copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
-  readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+  readdirSync, renameSync, rmSync, writeFileSync,
 } = physicalFs;
 import os from "node:os";
 import path from "node:path";
