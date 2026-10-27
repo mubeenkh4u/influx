@@ -10,6 +10,7 @@ export interface FluxerInstallation {
   path: string;
   state: "available" | "installed" | "broken" | "conflict" | "missing";
   details: string;
+  recoveryAvailable?: boolean;
 }
 
 const ASSETS = ["main.js", "preload.js", "renderer.js"] as const;
@@ -194,6 +195,7 @@ export function installationStatus(directory: string): FluxerInstallation {
     return {
       path: resources,
       state: "broken",
+      recoveryAvailable: true,
       details: "Influx shim is present, but _app.asar is " + archiveDescription(backup) +
         ". Use Inspect files to diagnose before making changes.",
     };
