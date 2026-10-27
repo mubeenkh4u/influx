@@ -124,23 +124,28 @@ export async function injectShim(resourcesDirectory: string, mainScript: string)
     writeFileSync(path.join(temporary, "index.js"),
       "require(" + JSON.stringify(mainScript) + ");\n");
     await createPackage(temporary, staged);
-    if (status.state === "available") {
-      renameSync(active, backup);
-      movedOriginal = true;
-      if (existsSync(unpacked)) {
-        renameSync(unpacked, backupUnpacked);
-        movedUnpacked = true;
-      }
-    } else {
-      renameSync(active, previous);
-      movedShim = true;
-    }
     try {
+      if (status.state === "available") {
+        renameSync(active, backup);
+        movedOriginal = true;
+        if (existsSync(unpacked)) {
+          renameSync(unpacked, backupUnpacked);
+          movedUnpacked = true;
+        }
+      } else {
+        renameSync(active, previous);
+        movedShim = true;
+      }
       renameSync(staged, active);
     } catch (error) {
-      if (movedShim) renameSync(previous, active);
-      if (movedUnpacked) renameSync(backupUnpacked, unpacked);
-      if (movedOriginal) renameSync(backup, active);
+      try {
+        if (movedShim && existsSync(previous) && !existsSync(active))
+          renameSync(previous, active);
+        if (movedUnpacked) renameSync(backupUnpacked, unpacked);
+        if (movedOriginal && !existsSync(active)) renameSync(backup, active);
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], "Influx installation and rollback failed");
+      }
       throw error;
     }
     if (movedShim) rmSync(previous, { force: true });
