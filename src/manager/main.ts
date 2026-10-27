@@ -32,7 +32,7 @@ function requiresElevation(directory: string): boolean {
 }
 
 async function requestElevation(
-  action: "install" | "uninstall", resources: string, mainScript?: string,
+  action: "install" | "uninstall" | "recover", resources: string, mainScript?: string,
 ): Promise<void> {
   const helper = path.join(path.dirname(process.execPath), "influx-manager-helper");
   if (!existsSync(helper))
@@ -232,9 +232,14 @@ function registerHandlers(): void {
       noLink: true,
     });
     if (answer.response !== 1) return snapshot();
-    const recovered = restoreFluxerBackup(resources, selection.filePaths[0]);
-    record("Verified Fluxer backup restored from user-selected archive. Preserved prior backup: " +
-      (recovered.preservedOldBackup ?? "none"));
+    if (requiresElevation(resources)) {
+      await requestElevation("recover", resources, selection.filePaths[0]);
+      record("Verified Fluxer backup restored using privileged Linux helper");
+    } else {
+      const recovered = restoreFluxerBackup(resources, selection.filePaths[0]);
+      record("Verified Fluxer backup restored from user-selected archive. Preserved prior backup: " +
+        (recovered.preservedOldBackup ?? "none"));
+    }
     return snapshot();
   });
   ipcMain.handle("manager:install", async (event) => {
