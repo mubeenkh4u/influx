@@ -55,4 +55,17 @@ await writeFile(path.join(appDirectory, "package.json"),
     main: "main.js",
   }, null, 2) + "\n");
 
+if (process.platform === "linux") {
+  const helperDirectory = path.join(root, "dist", "manager", "bin");
+  await mkdir(helperDirectory, { recursive: true });
+  const compiled = await Bun.build({
+    entrypoints: [path.join(root, "src/manager/helper.ts")],
+    compile: { outfile: path.join(helperDirectory, "influx-manager-helper") },
+  });
+  if (!compiled.success) {
+    for (const message of compiled.logs) console.error(message);
+    throw new Error("Linux privileged helper compilation failed");
+  }
+}
+
 console.log("Influx Manager app built in dist/manager/app");
