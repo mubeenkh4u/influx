@@ -61,6 +61,7 @@ if (process.platform === "linux") {
   const compiled = await Bun.build({
     entrypoints: [path.join(root, "src/manager/helper.ts")],
     compile: { outfile: path.join(helperDirectory, "influx-manager-helper") },
+    external: ["original-fs"],
   });
   if (!compiled.success) {
     for (const message of compiled.logs) console.error(message);
