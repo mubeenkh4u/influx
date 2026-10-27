@@ -1,6 +1,6 @@
 import { createPackage, extractFile, uncache } from "@electron/asar";
 import { randomBytes } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -51,14 +51,6 @@ export function inspectArchive(file: string): ArchiveInfo {
     info.error = error instanceof Error ? error.message : String(error);
   }
   return info;
-}
-
-function originalPackage(file: string): boolean {
-  return inspectArchive(file).kind === "fluxer";
-}
-
-function shim(file: string): boolean {
-  return inspectArchive(file).kind === "shim";
 }
 
 function archiveDescription(info: ArchiveInfo): string {
