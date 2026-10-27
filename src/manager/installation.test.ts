@@ -166,3 +166,21 @@ test("an unrelated ASAR is not a trusted Fluxer backup", async () => {
   expect(() => restoreFluxerBackup(resources, foreign)).toThrow();
   expect(readFileSync(path.join(resources, "_app.asar"))).toEqual(readFileSync(foreign));
 });
+
+test("legacy influx-original folder is diagnosed without modifying its archives", async () => {
+  const { resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  const legacy = path.join(resources, "influx-original");
+  mkdirSync(legacy);
+  const candidate = path.join(legacy, "app.asar");
+  copyFileSync(path.join(resources, "_app.asar"), candidate);
+  rmSync(path.join(resources, "_app.asar"));
+  const originalBytes = readFileSync(candidate);
+  const report = installationDiagnostics(resources);
+  expect(report).toContain("Previous Influx installation directory");
+  expect(report).toContain("app.asar: Fluxer package");
+  expect(readFileSync(candidate)).toEqual(originalBytes);
+  restoreFluxerBackup(resources, candidate);
+  expect(installationStatus(resources).state).toBe("installed");
+  expect(readFileSync(candidate)).toEqual(originalBytes);
+});
