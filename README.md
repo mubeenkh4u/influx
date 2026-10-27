@@ -65,6 +65,26 @@ See [the example plugin](examples/plugins/hello-influx). The plugin's runtime en
 
 External plugins are **untrusted until approved**. Modifying a previously approved plugin changes its fingerprint and prevents it from loading until reapproved. Plugin scripts run with access to Fluxer's client context: **only install and approve code from sources you trust**. These protections are integrity checks, not a JavaScript sandbox.
 
+## Recovering a "Broken" desktop installation
+
+Influx Manager may show **Broken** if the Influx `app.asar` shim is present, but its original Fluxer `_app.asar` backup is missing, unreadable, or not recognized. The old manager displayed one generic warning. The updated manager offers **Inspect files**, **Open resources**, and, when the shim itself is intact, **Restore verified backup**.
+
+1. Exit Fluxer completely, including its tray process, before making any repairs.
+2. Use **Inspect files** to review the ASAR status and package names. The inspection does not modify files. You can copy the report.
+3. Back up Fluxer's entire `resources` directory, including any `.unpacked` folders.
+4. If **Restore verified backup** is available, select an authentic original Fluxer `app.asar` from a matching Fluxer version. **Do not select the Influx shim or rename it to `_app.asar`.** The manager verifies the chosen archive before copying it to `_app.asar`, preserves existing invalid backups separately, and rolls back on failure.
+5. Once the status returns to **Installed**, you can use **Repair / Update Influx**. If you do not have a verified original archive, restore Fluxer using its official installation source first; do not use forced repair on unidentified archives.
+
+On Windows, this read-only PowerShell command checks whether the files exist:
+
+```powershell
+$resources = Join-Path $env:LOCALAPPDATA 'fluxer_desktop\current\resources'
+Get-Item -LiteralPath (Join-Path $resources 'app.asar'), (Join-Path $resources '_app.asar') -ErrorAction SilentlyContinue |
+    Select-Object Name, Length, LastWriteTime
+```
+
+**Note:** A backup restoration from a different Fluxer version may not be compatible, even if its ASAR metadata is valid. If the current `app.asar` is missing, selecting a backup alone is not sufficient to repair the installation.
+
 ## Important limitations
 
 - Plugin runtime loading only applies to the desktop client. Browser-extension support is not part of this work yet.
