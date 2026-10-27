@@ -13,6 +13,7 @@ const elements = {
   installationPath: document.getElementById("installation-path")!,
   installationDetails: document.getElementById("installation-details")!,
   install: document.getElementById("install") as HTMLButtonElement,
+  recoverBackup: document.getElementById("recover-backup") as HTMLButtonElement,
   uninstall: document.getElementById("uninstall") as HTMLButtonElement,
   plugins: document.getElementById("plugins")!,
   pluginCount: document.getElementById("plugin-count")!,
@@ -115,6 +116,7 @@ function render(snapshot: ManagerSnapshot): void {
   elements.install.textContent =
     snapshot.installation.state === "installed" ? "Repair / Update Influx" : "Install Influx";
   elements.uninstall.disabled = snapshot.installation.state !== "installed";
+  elements.recoverBackup.hidden = snapshot.installation.state !== "broken";
   elements.plugins.replaceChildren();
   const ready = snapshot.plugins.filter((plugin) => plugin.status === "ready").length;
   elements.pluginCount.textContent = ready + " enabled / " + snapshot.plugins.length + " detected";
@@ -137,6 +139,9 @@ function buttonHandler(id: string, handler: () => Promise<ManagerSnapshot | void
 buttonHandler("choose-fluxer", () => api.chooseFluxer(), "Fluxer installation selection updated.");
 buttonHandler("reset-fluxer", () => api.resetFluxer(), "Automatic Fluxer detection restored.");
 buttonHandler("install", () => api.install(), "Influx install/repair operation finished. Restart Fluxer.");
+buttonHandler("inspect-files", () => api.diagnose(), "Diagnostic inspection completed.");
+buttonHandler("open-resources", () => api.openResources(), "Fluxer resources folder opened.");
+buttonHandler("recover-backup", () => api.recoverBackup(), "Recovery dialog completed. Check the installation status.");
 buttonHandler("uninstall", () => api.uninstall(), "Fluxer restored. External plugin files were preserved.");
 buttonHandler("import-plugin", () => api.importPlugin(), "Import dialog closed. Review any new plugin before approving.");
 buttonHandler("open-plugins", () => api.openPlugins(), "Opened plugin folder.");
