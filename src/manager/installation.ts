@@ -262,12 +262,13 @@ function installCoreFiles(coreDirectory: string, outputDirectory: string): void 
   mkdirSync(outputDirectory, { recursive: true });
   for (const file of ASSETS) {
     const source = path.join(coreDirectory, file);
-    if (!existsSync(source)) throw new Error("Manager bundle is missing core/" + file);
-    if (readFileSync(source).length === 0) throw new Error("Empty core asset: " + file);
+    if (!nodeFs.existsSync(source)) throw new Error("Manager bundle is missing core/" + file);
+    if (nodeFs.readFileSync(source).length === 0) throw new Error("Empty core asset: " + file);
   }
   const staging = mkdtempSync(path.join(outputDirectory, ".core-"));
   try {
-    for (const file of ASSETS) copyFileSync(path.join(coreDirectory, file), path.join(staging, file));
+    for (const file of ASSETS)
+      writeFileSync(path.join(staging, file), nodeFs.readFileSync(path.join(coreDirectory, file)));
     for (const file of ASSETS) renameSync(path.join(staging, file), path.join(outputDirectory, file));
   } finally {
     rmSync(staging, { recursive: true, force: true });
