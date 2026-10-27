@@ -16,6 +16,9 @@ export interface ManagerBridge {
   plugin(id: string, action: "approve" | "enable" | "disable" | "remove"): Promise<ManagerSnapshot>;
   install(): Promise<ManagerSnapshot>;
   uninstall(): Promise<ManagerSnapshot>;
+  diagnose(): Promise<void>;
+  openResources(): Promise<void>;
+  recoverBackup(): Promise<ManagerSnapshot>;
   openPlugins(): Promise<void>;
   openLogs(): Promise<void>;
 }
