@@ -1,6 +1,15 @@
 import { createPackage, extractFile, uncache } from "@electron/asar";
 import { randomBytes } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import * as nodeFs from "node:fs";
+
+const physicalFs: typeof nodeFs = process.versions.electron
+  ? require("original-fs")
+  : nodeFs;
+
+const {
+  copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
+  readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+} = physicalFs;
 import os from "node:os";
 import path from "node:path";
 
