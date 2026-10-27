@@ -1,5 +1,6 @@
 import { createPackage, extractFile, uncache } from "@electron/asar";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -13,26 +14,94 @@ export interface FluxerInstallation {
 
 const ASSETS = ["main.js", "preload.js", "renderer.js"] as const;
 
-function originalPackage(asar: string): boolean {
-  try {
-    uncache(asar);
-    const pkg = JSON.parse(extractFile(asar, "package.json").toString("utf8")) as {
-      name?: string; productName?: string;
-    };
-    return /fluxer/i.test(pkg.name ?? "") || /fluxer/i.test(pkg.productName ?? "");
-  } catch {
-    return false;
-  }
+
+export interface ArchiveInfo {
+  file: string;
+  kind: "missing" | "shim" | "fluxer" | "unknown" | "unreadable";
+  sizeBytes?: number;
+  name?: string;
+  productName?: string;
+  version?: string;
+  main?: string;
+  error?: string;
 }
 
-function shim(asar: string): boolean {
+export function inspectArchive(file: string): ArchiveInfo {
+  const info: ArchiveInfo = { file, kind: "missing" };
+  if (!existsSync(file)) return info;
   try {
-    uncache(asar);
-    return (JSON.parse(extractFile(asar, "package.json").toString("utf8")) as { name?: string })
-      .name === "influx-shim";
-  } catch {
-    return false;
+    const stats = lstatSync(file);
+    info.sizeBytes = stats.size;
+    if (!stats.isFile()) throw new Error("Not a regular ASAR file");
+    uncache(file);
+    const value: unknown = JSON.parse(extractFile(file, "package.json").toString("utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("ASAR package.json does not contain an object");
+    const pkg = value as Record<string, unknown>;
+    info.name = typeof pkg.name === "string" ? pkg.name : undefined;
+    info.productName = typeof pkg.productName === "string" ? pkg.productName : undefined;
+    info.version = typeof pkg.version === "string" ? pkg.version : undefined;
+    info.main = typeof pkg.main === "string" ? pkg.main : undefined;
+    if (info.name === "influx-shim") info.kind = "shim";
+    else if (/fluxer/i.test(info.name ?? "") || /fluxer/i.test(info.productName ?? ""))
+      info.kind = "fluxer";
+    else info.kind = "unknown";
+  } catch (error) {
+    info.kind = "unreadable";
+    info.error = error instanceof Error ? error.message : String(error);
   }
+  return info;
+}
+
+function originalPackage(file: string): boolean {
+  return inspectArchive(file).kind === "fluxer";
+}
+
+function shim(file: string): boolean {
+  return inspectArchive(file).kind === "shim";
+}
+
+function archiveDescription(info: ArchiveInfo): string {
+  if (info.kind === "missing") return "file not found";
+  if (info.kind === "unreadable") return "unreadable ASAR (" + info.error + ")";
+  if (info.kind === "unknown")
+    return "unrecognized package (" + (info.name ?? "no name") + ")";
+  return info.kind === "shim" ? "Influx shim" : "Fluxer package (" + (info.name ?? "unnamed") + ")";
+}
+
+export function installationDiagnostics(resourcesDirectory: string): string {
+  const directory = path.resolve(resourcesDirectory);
+  const files = ["app.asar", "_app.asar"];
+  try {
+    const others = readdirSync(directory)
+      .filter((name) => name.endsWith(".asar") && !files.includes(name)).sort().slice(0, 12);
+    files.push(...others);
+  } catch {
+    // A missing or inaccessible resources directory is reported by inspectArchive.
+  }
+  const lines = [
+    "Influx Manager - installation diagnostic (read-only)",
+    "Resources directory: " + directory,
+    "Status: " + installationStatus(directory).state,
+    "Details: " + installationStatus(directory).details,
+    "",
+  ];
+  for (const name of files) {
+    const info = inspectArchive(path.join(directory, name));
+    lines.push(name + ": " + archiveDescription(info));
+    if (info.sizeBytes !== undefined) lines.push("  Size: " + info.sizeBytes + " bytes");
+    if (info.name) lines.push("  Package: " + info.name);
+    if (info.productName) lines.push("  Product: " + info.productName);
+    if (info.version) lines.push("  Version: " + info.version);
+    if (info.main) lines.push("  Entry point: " + info.main);
+  }
+  lines.push(
+    "",
+    "No files were modified by this diagnostic.",
+    "If _app.asar is missing, recover a genuine matching Fluxer archive before reinstalling Influx.",
+    "Never rename the Influx shim to _app.asar.",
+  );
+  return lines.join("\n");
 }
 
 export function defaultFluxerPaths(): string[] {
@@ -49,25 +118,36 @@ export function defaultFluxerPaths(): string[] {
     "/usr/lib/fluxer/resources"];
 }
 
+
 export function installationStatus(directory: string): FluxerInstallation {
   const resources = path.resolve(directory);
-  const active = path.join(resources, "app.asar");
-  const original = path.join(resources, "_app.asar");
-  const hasActive = existsSync(active);
-  const hasOriginal = existsSync(original);
-  if (hasActive && shim(active)) {
-    return hasOriginal && originalPackage(original)
-      ? { path: resources, state: "installed", details: "Influx shim installed" }
-      : { path: resources, state: "broken", details: "Influx shim exists but the Fluxer backup is missing or invalid" };
+  const current = inspectArchive(path.join(resources, "app.asar"));
+  const backup = inspectArchive(path.join(resources, "_app.asar"));
+  if (current.kind === "shim") {
+    if (backup.kind === "fluxer")
+      return { path: resources, state: "installed", details: "Influx shim installed; original Fluxer backup verified" };
+    return {
+      path: resources,
+      state: "broken",
+      details: "Influx shim is present, but _app.asar is " + archiveDescription(backup) +
+        ". Use Inspect files to diagnose before making changes.",
+    };
   }
-  if (hasActive && originalPackage(active)) {
-    return hasOriginal
-      ? { path: resources, state: "conflict", details: "A backup exists alongside the original Fluxer app. Inspect before installing." }
-      : { path: resources, state: "available", details: "Fluxer found. Influx is not installed." };
+  if (current.kind === "fluxer") {
+    return backup.kind === "missing"
+      ? { path: resources, state: "available", details: "Original Fluxer found; Influx is not installed" }
+      : { path: resources, state: "conflict",
+          details: "Original Fluxer found, but _app.asar also exists (" +
+            archiveDescription(backup) + "). Inspect the files before reinstalling." };
   }
-  if (!hasActive && hasOriginal && originalPackage(original))
-    return { path: resources, state: "broken", details: "Fluxer backup exists but app.asar is missing" };
-  return { path: resources, state: "missing", details: "No valid Fluxer app.asar was found" };
+  if (current.kind === "missing" && backup.kind === "fluxer")
+    return { path: resources, state: "broken",
+      details: "Original Fluxer backup exists but app.asar is missing. Recovery is required." };
+  if (current.kind === "missing" && backup.kind === "missing")
+    return { path: resources, state: "missing", details: "No app.asar or _app.asar found" };
+  return { path: resources, state: "conflict",
+    details: "Unexpected app.asar: " + archiveDescription(current) +
+      ". Existing files will not be overwritten." };
 }
 
 export function findFluxer(): FluxerInstallation {
