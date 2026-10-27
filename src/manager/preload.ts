@@ -10,6 +10,9 @@ const bridge: ManagerBridge = {
   plugin: (id, action) => ipcRenderer.invoke("manager:plugin", id, action),
   install: () => ipcRenderer.invoke("manager:install"),
   uninstall: () => ipcRenderer.invoke("manager:uninstall"),
+  diagnose: () => ipcRenderer.invoke("manager:diagnose"),
+  openResources: () => ipcRenderer.invoke("manager:open-resources"),
+  recoverBackup: () => ipcRenderer.invoke("manager:recover-backup"),
   openPlugins: () => ipcRenderer.invoke("manager:open-plugins"),
   openLogs: () => ipcRenderer.invoke("manager:open-logs"),
 };
