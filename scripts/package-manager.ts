@@ -27,5 +27,10 @@ await createPackage(path.join(root, "dist", "manager", "app"), path.join(resourc
 const executable = platform === "win32" ? "Influx Manager.exe" : "influx-manager";
 await rename(path.join(output, platform === "win32" ? "electron.exe" : "electron"),
   path.join(output, executable));
-if (platform === "linux") await chmod(path.join(output, executable), 0o755);
+if (platform === "linux") {
+  await chmod(path.join(output, executable), 0o755);
+  const helper = path.join(output, "influx-manager-helper");
+  await cp(path.join(root, "dist", "manager", "bin", "influx-manager-helper"), helper);
+  await chmod(helper, 0o755);
+}
 console.log("Packaged " + output);
