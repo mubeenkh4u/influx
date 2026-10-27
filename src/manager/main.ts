@@ -1,5 +1,7 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 
@@ -8,7 +10,7 @@ import {
   setExternalPlugin,
 } from "../shared/externalPlugins";
 import { influxDataDirectory } from "../shared/paths";
-import { findFluxer, installInflux, installationStatus, uninstallInflux } from "./installation";
+import { findFluxer, installInflux, installationStatus, stageCoreFiles, uninstallInflux } from "./installation";
 import type { ManagerSnapshot } from "./types";
 
 let window: BrowserWindow | null = null;
@@ -17,6 +19,36 @@ let customResources: string | null = null;
 const dataDirectory = influxDataDirectory();
 const preferencesFile = path.join(dataDirectory, "manager.json");
 const logFile = path.join(dataDirectory, "manager.log");
+const runFile = promisify(execFile);
+
+function requiresElevation(directory: string): boolean {
+  if (process.platform !== "linux") return false;
+  try {
+    accessSync(directory, constants.W_OK);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+async function requestElevation(
+  action: "install" | "uninstall", resources: string, mainScript?: string,
+): Promise<void> {
+  const helper = path.join(path.dirname(process.execPath), "influx-manager-helper");
+  if (!existsSync(helper))
+    throw new Error("The Linux administrator helper is missing from the manager package.");
+  try {
+    await runFile("pkexec", [helper, action, resources, ...(mainScript ? [mainScript] : [])], {
+      timeout: 180_000,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch (error) {
+    throw new Error(
+      "Could not obtain administrator permission. Install a polkit authentication agent, " +
+      "then retry. Details: " + String(error),
+    );
+  }
+}
 
 function record(message: string): void {
   try {
@@ -166,7 +198,13 @@ function registerHandlers(): void {
     });
     if (answer.response !== 1) return snapshot();
     const core = path.join(app.getAppPath(), "core");
-    await installInflux(resourcesDirectory(), core);
+    const resources = resourcesDirectory();
+    if (requiresElevation(resources)) {
+      const mainScript = stageCoreFiles(core);
+      await requestElevation("install", resources, mainScript);
+    } else {
+      await installInflux(resources, core);
+    }
     record("Installed or repaired Influx in " + installation.path);
     return snapshot();
   });
@@ -178,7 +216,11 @@ function registerHandlers(): void {
       buttons: ["Cancel", "Restore Fluxer"], defaultId: 0, cancelId: 0,
     });
     if (answer.response !== 1) return snapshot();
-    uninstallInflux(resourcesDirectory());
+    if (requiresElevation(resourcesDirectory())) {
+      await requestElevation("uninstall", resourcesDirectory());
+    } else {
+      uninstallInflux(resourcesDirectory());
+    }
     record("Uninstalled Influx from " + resourcesDirectory());
     return snapshot();
   });
