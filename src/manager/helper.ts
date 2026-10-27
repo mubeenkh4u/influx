@@ -1,9 +1,9 @@
-import { injectShim, uninstallInflux } from "./installation";
+import { injectShim, restoreFluxerBackup, uninstallInflux } from "./installation";
 
 async function run(): Promise<void> {
   const [action, resources, mainScript] = process.argv.slice(2);
   if (action === "--help") {
-    console.log("Influx Manager privileged helper\nUsage: influx-manager-helper install <resources> <main.js> | uninstall <resources>");
+    console.log("Influx Manager privileged helper\nUsage: influx-manager-helper install <resources> <main.js> | uninstall <resources> | recover <resources> <genuine.asar>");
     return;
   }
   if (typeof resources !== "string" || !resources)
@@ -13,6 +13,11 @@ async function run(): Promise<void> {
       throw new Error("The Influx main.js path is required");
     await injectShim(resources, mainScript);
     console.log("Influx injection installed");
+  } else if (action === "recover") {
+    if (typeof mainScript !== "string" || !mainScript)
+      throw new Error("A genuine Fluxer ASAR backup path is required");
+    restoreFluxerBackup(resources, mainScript);
+    console.log("Verified Fluxer backup restored");
   } else if (action === "uninstall") {
     uninstallInflux(resources);
     console.log("Influx injection removed");
