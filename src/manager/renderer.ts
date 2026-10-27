@@ -116,7 +116,7 @@ function render(snapshot: ManagerSnapshot): void {
   elements.install.textContent =
     snapshot.installation.state === "installed" ? "Repair / Update Influx" : "Install Influx";
   elements.uninstall.disabled = snapshot.installation.state !== "installed";
-  elements.recoverBackup.hidden = snapshot.installation.state !== "broken";
+  elements.recoverBackup.hidden = !snapshot.installation.recoveryAvailable;
   elements.plugins.replaceChildren();
   const ready = snapshot.plugins.filter((plugin) => plugin.status === "ready").length;
   elements.pluginCount.textContent = ready + " enabled / " + snapshot.plugins.length + " detected";
