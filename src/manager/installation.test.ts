@@ -138,3 +138,31 @@ test("recovery refuses shim archives and does not overwrite existing files", asy
   expect(readFileSync(path.join(resources, "_app.asar"))).toEqual(original);
   expect(installationStatus(resources).state).toBe("broken");
 });
+
+test("missing shim with intact backup cannot use the backup restore action", async () => {
+  const { resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  rmSync(path.join(resources, "app.asar"));
+  const status = installationStatus(resources);
+  expect(status.state).toBe("broken");
+  expect(status.recoveryAvailable).toBeUndefined();
+  expect(() => restoreFluxerBackup(resources, path.join(resources, "_app.asar"))).toThrow();
+});
+
+test("an unrelated ASAR is not a trusted Fluxer backup", async () => {
+  const { root, resources, core, data } = await setup();
+  await installInflux(resources, core, data);
+  const source = path.join(root, "foreign");
+  mkdirSync(source);
+  writeFileSync(path.join(source, "package.json"),
+    JSON.stringify({ name: "other-chat", version: "1.0.0", main: "index.js" }));
+  writeFileSync(path.join(source, "index.js"), "// other client");
+  const foreign = path.join(root, "foreign.asar");
+  await createPackage(source, foreign);
+  copyFileSync(foreign, path.join(resources, "_app.asar"));
+  expect(inspectArchive(path.join(resources, "_app.asar")).kind).toBe("unknown");
+  expect(installationStatus(resources).state).toBe("broken");
+  expect(installationDiagnostics(resources)).toContain("unrecognized package");
+  expect(() => restoreFluxerBackup(resources, foreign)).toThrow();
+  expect(readFileSync(path.join(resources, "_app.asar"))).toEqual(readFileSync(foreign));
+});
