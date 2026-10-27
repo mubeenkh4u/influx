@@ -209,8 +209,8 @@ function registerHandlers(): void {
   ipcMain.handle("manager:recover-backup", async (event) => {
     verifySender(event);
     const resources = resourcesDirectory();
-    if (installationStatus(resources).state !== "broken")
-      throw new Error("Backup recovery is only available for a broken Influx installation");
+    if (!installationStatus(resources).recoveryAvailable)
+      throw new Error("This installation cannot be repaired by restoring a backup archive");
     const selection = await dialog.showOpenDialog(window!, {
       title: "Select a clean Fluxer app.asar from a matching Fluxer installation",
       defaultPath: resources,
