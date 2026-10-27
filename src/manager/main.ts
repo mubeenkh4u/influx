@@ -11,6 +11,7 @@ import {
 } from "../shared/externalPlugins";
 import { influxDataDirectory } from "../shared/paths";
 import { findFluxer, installInflux, installationDiagnostics, installationStatus, restoreFluxerBackup, stageCoreFiles, uninstallInflux } from "./installation";
+import { runPhysicalArchiveSmoke } from "./archiveSmoke";
 import type { ManagerSnapshot } from "./types";
 
 let window: BrowserWindow | null = null;
@@ -323,6 +324,8 @@ void app.whenReady().then(async () => {
       })`);
       if (result.title !== "Influx Manager" || !result.bridge || !result.installation || !result.plugins || !result.diagnostics || !result.recovery)
         throw new Error("Dashboard did not initialize: " + JSON.stringify(result));
+      await runPhysicalArchiveSmoke();
+      console.log("[Influx Manager] Electron ASAR filesystem test passed");
       console.log("[Influx Manager] UI smoke test passed: " + JSON.stringify(result));
       app.exit(0);
     } catch (error) {
